@@ -662,6 +662,23 @@ export interface NewFeatureInput {
   permissionMode?: PermissionMode
   inPlace?: boolean
   baseBranch?: string
+  /** screenshots sent with the first message (e.g. elements picked on the main version) */
+  attachments?: Attachment[]
+}
+
+/** The project's main version: running, current, and the starting point for new changes. */
+export interface MainSiteState {
+  url?: string
+  branch: string
+  defaultBranch: string
+  /** the main checkout has uncommitted changes (so it isn't updated automatically) */
+  dirty: boolean
+  /** commits pulled just now */
+  updated: number
+  /** dependencies/assets/migrations are being refreshed after an update */
+  refreshing: boolean
+  /** why it wasn't updated, or what's off */
+  note?: string
 }
 
 export interface Api {
@@ -792,6 +809,8 @@ export interface Api {
   ensureServices(featureId: string): Promise<void>
   webServerStatus(): Promise<WebServerStatus>
   /** a project's environment, or (with featureId) the one a change's worktree uses */
+  /** start (if needed) and update the project's main version; returns where it runs */
+  mainSite(projectId: string): Promise<MainSiteState>
   devEnv(projectId: string, featureId?: string): Promise<DevEnvView>
   /** baseHash: the version the editor started from — refused if the file changed since */
   saveDevEnv(projectId: string, config: DevEnvironment, instructions?: string, baseHash?: string): Promise<DevEnvView>
@@ -824,4 +843,5 @@ export interface Events {
   'mail:received': MailSummary
   'checks:changed': ChecksProgress
   'update:changed': UpdateState
+  'main:updated': { projectId: string; commits: number }
 }

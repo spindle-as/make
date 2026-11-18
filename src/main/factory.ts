@@ -10,6 +10,7 @@ import type {
   DeployState,
   DevEnvironment,
   DevEnvView,
+  MainSiteState,
   Attachment,
   CheckResult,
   Events,
@@ -229,13 +230,13 @@ export class Factory {
     if (store().getSettings().restricted) throw new Error('Production access is turned off on this machine.')
     const t = token.trim()
     if (!t) {
-      store().setSecret('ploi', '')
+      await store().setSecret('ploi', '')
       this.emit('settings:changed', store().getSettings())
       return { servers: 0, sites: 0 }
     }
     const sites = await new PloiClient(t).allSites()
     const servers = new Set(sites.map((x) => x.serverId)).size || (await new PloiClient(t).servers()).length
-    store().setSecret('ploi', t)
+    await store().setSecret('ploi', t)
     this.ploiSiteCache = null
     this.emit('settings:changed', store().getSettings())
     return { servers, sites: sites.length }
@@ -767,14 +768,15 @@ export class Factory {
       }
     }
     this.saveFeature(f)
-    if (prompt) store().upsertItem(f.id, { id: uid('u'), role: 'user', text: prompt, ts: Date.now() })
+    const shots = input.attachments?.length ?? 0
+    if (prompt) store().upsertItem(f.id, { id: uid('u'), role: 'user', text: prompt + (shots ? `\n\n📎 ${shots} screenshot${shots > 1 ? 's' : ''} attached` : ''), ts: Date.now() })
     if (prompt && !explicitTitle) void this.generateTitle(f.id, prompt)
 
     const kickoff = () => {
       if (!prompt) return
       try {
         if (this.agents.isRunning(f.id)) return
-        this.startAgent(f.id, prompt, false)
+        this.startAgent(f.id, prompt, false, input.attachments ?? [])
       } catch (e) {
         this.addSystemItem(f.id, `Could not start the agent: ${(e as Error).message}`, 'error')
       }
@@ -1137,6 +1139,92 @@ export class Factory {
 
   answerQuestion(featureId: string, requestId: string, answers: Record<string, string>): void {
     this.agents.answerQuestion(featureId, requestId, answers)
+  }
+
+  // ---------------- the main version ----------------
+
+  private mainFetchedAt = new Map<string, number>()
+  private mainRefreshing = new Set<string>()
+
+  /**
+   * The project's main version — always running at its own address and kept current, so new
+   * changes can start from it (browse it, point at things, start a change from those notes).
+   * Updates only fast-forward a clean checkout of the main branch; anything else is left alone.
+   */
+  async mainSite(projectId: string): Promise<MainSiteState> {
+    const p = store().project(projectId)
+    if (!existsSync(p.path)) throw new Error(`The project folder ${p.path} is missing.`)
+    const branch = await git.currentBranch(p.path)
+    const dirty = (await exec('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: p.path })).stdout.trim() !== ''
+    let updated = 0
+    let note: string | undefined
+    if (branch !== p.defaultBranch) note = `The main checkout is on ${branch}, not ${p.defaultBranch}, so it isn’t updated automatically.`
+    else if (dirty) note = 'The main checkout has uncommitted changes, so it isn’t updated automatically.'
+    else if (p.githubRepo && Date.now() - (this.mainFetchedAt.get(p.id) ?? 0) > 60_000) {
+      this.mainFetchedAt.set(p.id, Date.now())
+      const before = (await exec('git', ['rev-parse', 'HEAD'], { cwd: p.path })).stdout.trim()
+      const fetched = await exec('git', ['fetch', '--quiet', 'origin', p.defaultBranch], { cwd: p.path, timeoutMs: 60_000 })
+      if (fetched.code === 0) {
+        const ff = await exec('git', ['merge', '--ff-only', '--quiet', `origin/${p.defaultBranch}`], { cwd: p.path, timeoutMs: 60_000 })
+        const after = (await exec('git', ['rev-parse', 'HEAD'], { cwd: p.path })).stdout.trim()
+        if (ff.code !== 0) note = `Couldn’t fast-forward ${p.defaultBranch} (it has local commits).`
+        else if (after !== before) {
+          updated = Number((await exec('git', ['rev-list', '--count', `${before}..${after}`], { cwd: p.path })).stdout.trim()) || 1
+          const files = (await exec('git', ['diff', '--name-only', before, after], { cwd: p.path })).stdout.split('\n').filter(Boolean)
+          void this.refreshMain(p.id, files, updated)
+        }
+      }
+    }
+    let url = p.localUrl
+    if ((p.server ?? (p.herdEnabled ? 'herd' : 'spindle')) !== 'herd') {
+      const u = await this.registerProjectSite(p.id)
+      if (u) url = u
+      const site = this.projectSite(store().project(p.id))
+      this.clearStaleHot(p.path)
+      await this.ensureSiteBackend(site).catch((e) => {
+        note = (e as Error).message
+      })
+    }
+    return { url, branch, defaultBranch: p.defaultBranch, dirty, updated, refreshing: this.mainRefreshing.has(p.id), note }
+  }
+
+  /** A leftover public/hot (Vite dev server no longer running) makes every page load broken assets. */
+  private clearStaleHot(root: string): void {
+    const hot = join(root, 'public', 'hot')
+    if (!existsSync(hot)) return
+    const port = Number(readFileSync(hot, 'utf8').match(/:(\d+)/)?.[1])
+    void waitForPort(port || 5173, 200).then((up) => {
+      if (!up) rmSync(hot, { force: true })
+    })
+  }
+
+  /** After pulling, bring dependencies, assets and the database up to date — only what changed. */
+  private async refreshMain(projectId: string, files: string[], commits: number): Promise<void> {
+    if (this.mainRefreshing.has(projectId)) return
+    this.mainRefreshing.add(projectId)
+    const p = store().project(projectId)
+    const owner = `project:${p.id}`
+    const env = this.procEnv(this.runnable(p))
+    const changed = (re: RegExp) => files.some((f) => re.test(f))
+    const steps: [string, string][] = []
+    if (changed(/^composer\.(json|lock)$/) && existsSync(join(p.path, 'composer.json'))) steps.push(['Update PHP packages', 'composer install --no-interaction --prefer-dist --no-progress'])
+    const pkg = existsSync(join(p.path, 'package.json'))
+    if (pkg && changed(/^package(-lock)?\.json$|^pnpm-lock\.yaml$|^yarn\.lock$/)) steps.push(['Update JavaScript packages', existsSync(join(p.path, 'package-lock.json')) ? 'npm ci --no-audit --no-fund' : 'npm install --no-audit --no-fund'])
+    if (pkg && existsSync(join(p.path, 'public', 'build')) && changed(/^(resources|vite\.config|tailwind\.config|postcss\.config|package)/)) steps.push(['Build assets', 'npm run build'])
+    if (existsSync(join(p.path, 'artisan')) && changed(/^database\/migrations\//)) steps.push(['Run migrations', 'php artisan migrate --force'])
+    try {
+      for (const [name, command] of steps) {
+        const proc = this.processes.start(owner, `Main: ${name}`, command, 'command', p.path, env)
+        const done = await this.processes.wait(proc.id)
+        if (done.code !== 0) {
+          this.toast('error', `Updating the main version: “${name}” failed — see its output in the project’s processes.`)
+          break
+        }
+      }
+    } finally {
+      this.mainRefreshing.delete(projectId)
+    }
+    this.emit('main:updated', { projectId, commits })
   }
 
   // ---------------- development environment (.spindle) ----------------

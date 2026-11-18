@@ -7,6 +7,7 @@ import { useWords } from '../lib/words'
 import { ProjectSetupCard } from './OpenProject'
 import { act, orderedThreads, useStore } from '../store'
 import { Composer, type AgentConfig } from './Composer'
+import { MainVersion } from './MainVersion'
 import { Kbd, Segmented, Select, timeAgo } from './ui'
 import { shortcutFor } from '../lib/shortcuts'
 
@@ -61,19 +62,24 @@ export function NewThread() {
   }
 
   const ideas = isFeature ? FEATURE_IDEAS : CHAT_IDEAS
+  // Next to "Start a change": the project's main version, live — point at what should change.
+  const showMain = isFeature && !!project && project.setup?.status !== 'running' && project.setup?.status !== 'failed'
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="drag h-12 shrink-0" />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 pt-[8vh] pb-12">
+        <div className={clsx('mx-auto flex w-full flex-col gap-6 px-6 pb-12', showMain ? 'max-w-2xl pt-[5vh]' : 'max-w-3xl pt-[8vh]')}>
           <div className="flex flex-col items-center gap-3 text-center">
             <div className="flex size-12 items-center justify-center rounded-2xl border border-line-strong bg-raised">
               {isFeature ? <Factory className="size-6 text-accent-strong" /> : <MessageSquare className="size-6 text-accent-strong" />}
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">{isFeature ? w.whatShouldWeBuild : 'What do you want to talk about?'}</h1>
             <p className="max-w-lg text-base text-muted">
-              {isFeature
+              {showMain
+                ? 'Describe it here — or point at things in the live app on the right. Either way it starts in its own safe copy.'
+                : isFeature
                 ? w.buildHint
                 : project
                   ? `Ask anything about ${project.name}. Nothing is changed unless you ask — continue it as a feature when you're ready.`
@@ -213,6 +219,15 @@ export function NewThread() {
           )}
         </div>
       </div>
+    </div>
+    {showMain && (
+      <div className="flex w-[52%] max-w-[980px] min-w-[420px] shrink-0 flex-col border-l border-line bg-panel">
+        <div className="drag h-12 shrink-0 border-b border-line" />
+        <div className="min-h-0 flex-1">
+          <MainVersion key={project!.id} project={project!} agent={{ agent: draft.agent, model: draft.model, effort: draft.effort, permissionMode: draft.permissionMode, baseBranch: draft.baseBranch }} />
+        </div>
+      </div>
+    )}
     </div>
   )
 }

@@ -116,31 +116,35 @@ class Store {
     return this.getSettings()
   }
 
-  /** Secrets live in the macOS Keychain (see keychain.ts); cached here after the first read. */
+  /** Secrets live in the macOS Keychain (see keychain.ts), loaded into memory at startup. */
   private secretCache = new Map<string, string | undefined>()
+  private static SECRET_KEYS = ['ploi']
 
-  setSecret(key: string, value: string): void {
-    this.secretCache.delete(key)
+  /** Load every known secret from the Keychain (call once at startup, before anything needs them). */
+  async loadSecrets(): Promise<void> {
+    for (const key of Store.SECRET_KEYS) {
+      const r = await keychainGet(key)
+      if (r.error) console.warn(`Couldn’t read the ${key} secret from the Keychain:`, r.error)
+      this.secretCache.set(key, r.value)
+    }
+  }
+
+  async setSecret(key: string, value: string): Promise<void> {
     if (!value) {
-      keychainDelete(key)
-    } else if (keychainSet(key, value)) {
-      this.secretCache.set(key, value)
+      await keychainDelete(key)
+      this.secretCache.set(key, undefined)
     } else {
-      throw new Error('Couldn’t store the secret: the macOS Keychain isn’t available.')
+      const r = await keychainSet(key, value)
+      if (!r.ok) throw new Error(`Couldn’t save it in the macOS Keychain: ${r.error}`)
+      this.secretCache.set(key, value)
     }
     delete this.state.secrets[key]
     this.persist()
   }
 
-  /**
-   * Never throws and never blocks: reads only the Keychain. Secrets saved by older builds
-   * (Electron safeStorage) are moved over by migrateLegacySecrets(), which runs in the background.
-   */
+  /** Never throws or blocks: answers from memory (filled by loadSecrets / setSecret). */
   getSecret(key: string): string | undefined {
-    if (this.secretCache.has(key)) return this.secretCache.get(key)
-    const value = keychainGet(key)
-    this.secretCache.set(key, value)
-    return value
+    return this.secretCache.get(key)
   }
 
   /**
@@ -151,16 +155,16 @@ class Store {
   async migrateLegacySecrets(): Promise<string[]> {
     const moved: string[] = []
     for (const [key, legacy] of Object.entries(this.state.secrets)) {
-      if (keychainGet(key)) {
+      if (this.secretCache.get(key)) {
         delete this.state.secrets[key]
         continue
       }
       try {
         const buf = Buffer.from(legacy.slice(4), 'base64')
         const value = legacy.startsWith('enc:') ? (await safeStorage.decryptStringAsync(buf)).result : buf.toString()
-        if (value && keychainSet(key, value)) {
+        if (value && (await keychainSet(key, value)).ok) {
+          this.secretCache.set(key, value)
           delete this.state.secrets[key]
-          this.secretCache.delete(key)
           moved.push(key)
         }
       } catch (e) {

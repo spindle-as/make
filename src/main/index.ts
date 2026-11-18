@@ -243,6 +243,7 @@ const handlers: Handlers = {
   ensureServices: async (featureId) => factory.ensureServices(featureId),
   webServerStatus: () => factory.webServerStatus(),
   trustCertificates: () => factory.trustCertificates(),
+  mainSite: (projectId) => factory.mainSite(projectId),
   devEnv: async (projectId, featureId) => factory.devEnv(projectId, featureId),
   saveDevEnv: async (projectId, config, instructions, baseHash) => factory.saveDevEnv(projectId, config, instructions, baseHash),
   detectDevEnv: async (projectId) => factory.detectDevEnv(projectId),
@@ -405,10 +406,11 @@ app.whenReady().then(() => {
   createWindow()
   // Old builds kept tokens in safeStorage; move them to the Keychain without blocking startup.
   void store()
-    .migrateLegacySecrets()
-    .then((moved) => moved.length && emit('settings:changed', store().getSettings()))
-    .catch((e) => console.error('secret migration', e))
-  factory.startDeployRefresh()
+    .loadSecrets()
+    .then(() => store().migrateLegacySecrets())
+    .then(() => emit('settings:changed', store().getSettings()))
+    .catch((e) => console.error('secrets', e))
+    .finally(() => factory.startDeployRefresh())
   factory.refreshAllAccess()
   factory.syncAllEnvMirrors()
   void factory.mail.start().catch((e) => console.error('mail catcher', e))
