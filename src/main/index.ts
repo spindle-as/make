@@ -67,6 +67,9 @@ const handlers: Handlers = {
   setSecret: async (key, value) => store().setSecret(key, value),
   checkTools: () => factory.checkTools(),
   updateState: async () => updater.get(),
+  setBadge: async (count) => {
+    app.dock?.setBadge(count > 0 ? String(count) : '')
+  },
   checkForUpdates: () => updater.check(),
   downloadUpdate: () => updater.download(),
   installUpdate: async () => {
@@ -113,6 +116,7 @@ const handlers: Handlers = {
   dbReset: (id) => factory.dbReset(id),
 
   // review
+  cancelChecks: (id) => factory.cancelChecks(id),
   checkChanges: (id) => factory.checkChanges(id),
   draftPr: (id) => factory.draftPr(id),
   addVisualNote: async (id, note) => factory.addVisualNote(id, note),
@@ -399,6 +403,11 @@ function buildMenu(): void {
 app.whenReady().then(() => {
   buildMenu()
   createWindow()
+  // Old builds kept tokens in safeStorage; move them to the Keychain without blocking startup.
+  void store()
+    .migrateLegacySecrets()
+    .then((moved) => moved.length && emit('settings:changed', store().getSettings()))
+    .catch((e) => console.error('secret migration', e))
   factory.startDeployRefresh()
   factory.refreshAllAccess()
   factory.syncAllEnvMirrors()
@@ -437,3 +446,9 @@ app.on('window-all-closed', () => {
 })
 // A terminal kill (or logout) shouldn't orphan dev servers and PHP backends: quit cleanly instead.
 for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(sig, () => app.quit())
+// A bug in a background timer shouldn't take over the screen with a crash dialog: log it and tell the user.
+process.on('uncaughtException', (e) => {
+  console.error('Uncaught exception', e)
+  emit('toast', { kind: 'error', message: `Something went wrong in the background: ${e.message}` })
+})
+process.on('unhandledRejection', (e) => console.error('Unhandled rejection', e))

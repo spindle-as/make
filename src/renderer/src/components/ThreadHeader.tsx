@@ -58,37 +58,6 @@ function Pipeline({ feature }: { feature: Feature }) {
   )
 }
 
-function NextStep({ feature }: { feature: Feature }) {
-  const setTab = useStore((s) => s.setRightTab)
-  const running = useStore((s) => s.statuses[feature.id]?.running)
-  if (feature.cleanedUp) return <span className="text-sm text-faint">Shipped and cleaned up.</span>
-  if (running) return <span className="truncate text-sm text-faint">The agent is working — switch to another thread meanwhile (⌥↓).</span>
-  const hint = (text: string, label: string, tab: RightTab) => (
-    <div className="flex min-w-0 items-center gap-2.5 text-sm text-faint">
-      <span className="truncate">{text}</span>
-      <button type="button" onClick={() => setTab(tab)} className="no-drag shrink-0 rounded-md bg-accent/15 px-2.5 py-1 text-sm font-medium text-accent-strong hover:bg-accent/25">
-        {label} →
-      </button>
-    </div>
-  )
-  switch (feature.stage) {
-    case 'setup':
-      return hint('Setting up the workspace…', 'Setup log', 'setup')
-    case 'coding':
-      return hint('Describe what to build below.', 'Changes', 'changes')
-    case 'testing':
-      return feature.localUrl ? hint(`Test it at ${feature.localUrl.replace(/^https?:\/\//, '')}`, 'Preview', 'preview') : hint('Review the changes, then open a PR.', 'Ship', 'ship')
-    case 'pr':
-      return hint('Watch CI and merge when green.', 'Ship', 'ship')
-    case 'merged':
-      return hint('Merged — ready to deploy.', 'Deploy', 'ship')
-    case 'deployed':
-      return hint('Deployed. Keep an eye on production.', 'Logs', 'logs')
-    default:
-      return null
-  }
-}
-
 function Title({ feature }: { feature: Feature }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(feature.title)
@@ -206,9 +175,7 @@ export function ThreadHeader({ feature, project }: { feature: Feature; project: 
       {!isChat && (
         <div className="flex h-12 shrink-0 items-center gap-4 border-b border-line px-4">
           <Pipeline feature={feature} />
-          <div className="min-w-0 flex-1">
-            <NextStep feature={feature} />
-          </div>
+          <div className="min-w-0 flex-1" />
           {project && <DeployPill project={project} feature={feature} />}
         </div>
       )}

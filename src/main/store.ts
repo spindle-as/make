@@ -1,4 +1,5 @@
 import { app, safeStorage } from 'electron'
+import { keychainDelete, keychainGet, keychainSet } from './keychain'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -104,7 +105,7 @@ class Store {
   getSettings(): Settings {
     return {
       ...this.state.settings,
-      hasPloiToken: !!this.state.secrets.ploi
+      hasPloiToken: !!this.getSecret('ploi')
     }
   }
 
@@ -115,23 +116,61 @@ class Store {
     return this.getSettings()
   }
 
+  /** Secrets live in the macOS Keychain (see keychain.ts); cached here after the first read. */
+  private secretCache = new Map<string, string | undefined>()
+
   setSecret(key: string, value: string): void {
+    this.secretCache.delete(key)
     if (!value) {
-      delete this.state.secrets[key]
-    } else if (safeStorage.isEncryptionAvailable()) {
-      this.state.secrets[key] = 'enc:' + safeStorage.encryptString(value).toString('base64')
+      keychainDelete(key)
+    } else if (keychainSet(key, value)) {
+      this.secretCache.set(key, value)
     } else {
-      this.state.secrets[key] = 'raw:' + Buffer.from(value).toString('base64')
+      throw new Error('Couldn’t store the secret: the macOS Keychain isn’t available.')
     }
+    delete this.state.secrets[key]
     this.persist()
   }
 
+  /**
+   * Never throws and never blocks: reads only the Keychain. Secrets saved by older builds
+   * (Electron safeStorage) are moved over by migrateLegacySecrets(), which runs in the background.
+   */
   getSecret(key: string): string | undefined {
-    const v = this.state.secrets[key]
-    if (!v) return undefined
-    const buf = Buffer.from(v.slice(4), 'base64')
-    if (v.startsWith('enc:')) return safeStorage.decryptString(buf)
-    return buf.toString()
+    if (this.secretCache.has(key)) return this.secretCache.get(key)
+    const value = keychainGet(key)
+    this.secretCache.set(key, value)
+    return value
+  }
+
+  /**
+   * Move secrets stored by older builds (safeStorage) into the Keychain. Uses the async API on
+   * purpose: reading the old key can make macOS show a Keychain prompt, and the synchronous call
+   * would freeze the whole app until it's answered. Returns the keys that were migrated.
+   */
+  async migrateLegacySecrets(): Promise<string[]> {
+    const moved: string[] = []
+    for (const [key, legacy] of Object.entries(this.state.secrets)) {
+      if (keychainGet(key)) {
+        delete this.state.secrets[key]
+        continue
+      }
+      try {
+        const buf = Buffer.from(legacy.slice(4), 'base64')
+        const value = legacy.startsWith('enc:') ? (await safeStorage.decryptStringAsync(buf)).result : buf.toString()
+        if (value && keychainSet(key, value)) {
+          delete this.state.secrets[key]
+          this.secretCache.delete(key)
+          moved.push(key)
+        }
+      } catch (e) {
+        // Unreadable by this build (or access denied): drop it, so the user simply enters it again.
+        console.warn(`The saved ${key} secret couldn’t be read by this build — enter it again in Settings → Integrations.`, (e as Error).message)
+        delete this.state.secrets[key]
+      }
+    }
+    this.persist()
+    return moved
   }
 
   // ---- deploys ----

@@ -22,6 +22,7 @@ import type { ChatItem, DevEnvView, Feature } from '@shared/types'
 import { act, actOk, useStore } from '../store'
 import { Composer, type AgentConfig } from './Composer'
 import { TrustBanner } from './DevEnvEditor'
+import { TurnStatus } from './TurnStatus'
 import { RequestCards } from './RequestCards'
 import { Empty, Spinner } from './ui'
 
@@ -240,6 +241,7 @@ export function ThreadComposer({ feature }: { feature: Feature }) {
   }
   return (
     <div className="mx-auto w-full max-w-3xl px-6 pb-5">
+      <TurnStatus feature={feature} />
       <Composer
         cfg={cfg}
         onChange={onChange}

@@ -29,7 +29,7 @@ const menu = {
 
 // contextBridge can't clone a Proxy, so expose concrete functions.
 const methods = [
-  'getSettings', 'saveSettings', 'setSecret', 'checkTools', 'updateState', 'checkForUpdates', 'downloadUpdate', 'installUpdate', 'integrations', 'integrationAction', 'connectPloi',
+  'getSettings', 'saveSettings', 'setSecret', 'checkTools', 'updateState', 'setBadge', 'checkForUpdates', 'downloadUpdate', 'installUpdate', 'integrations', 'integrationAction', 'connectPloi',
   'listModels', 'setZoom', 'promoteToFeature', 'cleanupFeature', 'dbServices', 'projectDbInfo', 'ploiAllSites', 'suggestPloiSites', 'linkPloiSite', 'pickDirectory', 'openExternal', 'openInEditor',
   'openInFinder', 'openInTerminal', 'listProjects', 'addProject', 'updateProject', 'removeProject', 'listFeatures',
   'createFeature', 'updateFeature', 'rerunSetup', 'archiveFeature', 'getThread', 'sendPrompt', 'stopAgent',
@@ -40,7 +40,7 @@ const methods = [
   'deployStates', 'deployHistory', 'deploymentLog', 'listProcesses', 'processOutput', 'startService', 'stopProcess', 'restartProcess',
   'removeProcess', 'writeProcessInput', 'githubRepos', 'openGithubRepo', 'createLaravelProject', 'prepareProject', 'refreshAccess',
   'mailList', 'mailGet', 'mailClear', 'mailServerInfo', 'dbTables', 'dbRows', 'dbQuery', 'dbSnapshots', 'dbSnapshot', 'dbRestore', 'dbReset',
-  'checkChanges', 'draftPr', 'addVisualNote', 'ensureServices', 'webServerStatus', 'trustCertificates', 'devEnv', 'saveDevEnv', 'detectDevEnv', 'trustDevEnv'
+  'checkChanges', 'cancelChecks', 'draftPr', 'addVisualNote', 'ensureServices', 'webServerStatus', 'trustCertificates', 'devEnv', 'saveDevEnv', 'detectDevEnv', 'trustDevEnv'
 ] as const satisfies readonly (keyof Api)[]
 
 // Compile error here means a new Api method was not added to `methods`.

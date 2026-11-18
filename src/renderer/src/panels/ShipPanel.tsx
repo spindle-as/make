@@ -12,6 +12,7 @@ import {
   X
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { ciGate } from '@shared/ci'
 import type { CheckRun, Feature, GitStatusInfo, Project, PullRequestInfo, WorkflowRun } from '@shared/types'
 import { EnvDeployCard } from '../components/DeployStatus'
 import { ChecksSection } from './ReviewPanel'
@@ -102,8 +103,6 @@ export function ShipPanel({ feature, project }: { feature: Feature; project: Pro
 
   const merge = async () => {
     if (!pr) return
-    const failing = pr.checks.filter((c) => c.bucket === 'fail')
-    if (failing.length && !confirm(`${failing.length} check(s) are failing. Merge anyway?`)) return
     setBusy('merge')
     await act(() => window.api.mergePr(feature.id), `Merged #${pr.number}`)
     setBusy('')
@@ -137,7 +136,8 @@ export function ShipPanel({ feature, project }: { feature: Feature; project: Pro
   }
 
   const envs = project.environments
-  const canMerge = pr?.state === 'OPEN' && !pr.isDraft && pr.mergeable !== 'CONFLICTING'
+  const gate = ciGate(pr?.checks ?? [], runs)
+  const canMerge = pr?.state === 'OPEN' && !pr.isDraft && pr.mergeable !== 'CONFLICTING' && gate.ok
 
   if (feature.inPlace) {
     return (
@@ -290,7 +290,8 @@ export function ShipPanel({ feature, project }: { feature: Feature; project: Pro
                   </Button>
                 )}
                 <div className="flex-1" />
-                <Button variant="success" icon={<GitMerge className="size-4" />} loading={busy === 'merge'} disabled={!canMerge} onClick={merge}>
+                {!gate.ok && <span className={clsx('text-sm', gate.state === 'failed' ? 'text-bad' : 'text-warn')}>{gate.reason}</span>}
+                <Button variant="success" icon={<GitMerge className="size-4" />} loading={busy === 'merge'} disabled={!canMerge} onClick={merge} title={gate.reason}>
                   {settings?.mergeMethod === 'squash' ? 'Squash & merge' : settings?.mergeMethod === 'rebase' ? 'Rebase & merge' : 'Merge'}
                 </Button>
               </div>

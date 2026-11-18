@@ -112,7 +112,7 @@ const PICKER = `(() => {
 const VIEWPORTS = { desktop: 0, tablet: 820, mobile: 390 } as const
 type Viewport = keyof typeof VIEWPORTS
 
-export function PreviewPanel({ feature, project }: { feature: Feature; project: Project }) {
+export function PreviewPanel({ feature, project, active = true }: { feature: Feature; project: Project; active?: boolean }) {
   const ref = useRef<WebviewEl | null>(null)
   const [url, setUrl] = useState(feature.localUrl ?? '')
   const [linking, setLinking] = useState(false)
@@ -125,16 +125,49 @@ export function PreviewPanel({ feature, project }: { feature: Feature; project: 
   const setNotes = useNotes((s) => s.set)
   const running = useStore((s) => s.statuses[feature.id]?.running ?? false)
   const wasRunning = useRef(running)
+  const [stale, setStale] = useState(false)
+  const [tipHidden, setTipHidden] = useState(() => {
+    try {
+      return localStorage.getItem('sf.previewTip') === 'hidden'
+    } catch {
+      return false
+    }
+  })
+  const hideTip = () => {
+    setTipHidden(true)
+    try {
+      localStorage.setItem('sf.previewTip', 'hidden')
+    } catch {
+      /* fine */
+    }
+  }
 
   useEffect(() => {
     setUrl(feature.localUrl ?? '')
   }, [feature.localUrl])
 
-  // When the agent finishes a turn, show the result.
+  // When the agent finishes a turn, offer a reload instead of forcing one: a forced reload would
+  // throw away whatever you're in the middle of (a login, an OTP step, a half-filled form).
   useEffect(() => {
-    if (wasRunning.current && !running) ref.current?.reload()
+    if (wasRunning.current && !running) setStale(true)
     wasRunning.current = running
   }, [running])
+  const reload = () => {
+    setStale(false)
+    ref.current?.reload()
+  }
+  // Keyboard reload (⌘R) only for the preview you're looking at.
+  useEffect(() => {
+    if (!active) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey && !e.shiftKey && e.key.toLowerCase() === 'r' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault()
+        reload()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   useEffect(() => {
     const el = ref.current
@@ -257,7 +290,7 @@ export function PreviewPanel({ feature, project }: { feature: Feature; project: 
         <IconButton title="Forward" onClick={() => ref.current?.goForward()}>
           <ArrowRight className="size-4" />
         </IconButton>
-        <IconButton title="Reload" onClick={() => ref.current?.reload()}>
+        <IconButton title="Reload (⌘R)" onClick={reload}>
           <RotateCw className="size-4" />
         </IconButton>
         <form
@@ -284,6 +317,16 @@ export function PreviewPanel({ feature, project }: { feature: Feature; project: 
             { value: 'mobile', label: <Smartphone className="size-4" />, title: 'Mobile (390px)' }
           ]}
         />
+        {stale && (
+          <button
+            type="button"
+            onClick={reload}
+            title="The AI finished a turn. Reload to see its changes — your current page state is kept until you do."
+            className="ml-1 flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-accent/20 px-2.5 text-xs font-semibold text-accent-strong hover:bg-accent/30"
+          >
+            <RotateCw className="size-3.5" /> New changes — reload
+          </button>
+        )}
         {errors.length > 0 && (
           <button
             type="button"
@@ -304,6 +347,23 @@ export function PreviewPanel({ feature, project }: { feature: Feature; project: 
         </Button>
         <span className="truncate text-xs text-faint">{picking ? 'Hover the page — the highlighted part is what you’ll comment on.' : 'Pick parts of the page, say what to change, and send them all at once.'}</span>
       </div>
+
+      {!tipHidden && (
+        <div className="flex items-center gap-3 border-b border-line bg-accent/[0.06] px-3 py-2 text-xs text-muted">
+          <span className="shrink-0 font-semibold text-fg">How to test</span>
+          <span className="min-w-0 truncate">
+            <b className="text-fg">1</b> Click around like a user would · <b className="text-fg">2</b> Something off? Point at it, or tell the AI in the chat ·{' '}
+            <b className="text-fg">3</b> Happy with it?
+          </span>
+          <button type="button" onClick={() => useStore.getState().setRightTab('ship')} className="shrink-0 font-semibold text-accent-strong hover:underline">
+            Check &amp; submit →
+          </button>
+          <div className="flex-1" />
+          <IconButton title="Got it — hide this tip" className="size-6" onClick={hideTip}>
+            <X className="size-3.5" />
+          </IconButton>
+        </div>
+      )}
 
       {showErrors && errors.length > 0 && (
         <div className="max-h-48 overflow-y-auto border-b border-bad/30 bg-bad/[0.06] p-3">

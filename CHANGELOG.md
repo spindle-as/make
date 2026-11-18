@@ -4,6 +4,14 @@ All notable changes to Spindle Make. `npm run release` moves the **Unreleased** 
 
 ## Unreleased
 
+- **Fixed: crash about decrypting a saved token** ("Error while decrypting the ciphertext provided to safeStorage"). Tokens now live in the macOS Keychain, so app updates can't make them unreadable. Old tokens move over automatically in the background — or, if macOS doesn't allow it, Ploi asks you to connect again once.
+- **Fixed: the preview reset when switching tabs** (or threads, or closing the panel), which broke logins and OTP flows. Previews now stay alive, and when the AI finishes it offers *New changes — reload* instead of reloading under you.
+- **Always clear whose turn it is**: a status bar above the message box shows *working* (what it's doing, for how long, Stop), *waiting for you*, or *done — your turn* with the next step. Threads that finished while you were elsewhere are marked in the sidebar and counted on the Dock icon.
+- **Clear next steps** while testing and after: *Try it*, *Check & submit*, review status, deploy — plus a short "how to test" guide in the preview.
+- **Check changes shows live progress**: which check is running, its output as it happens, elapsed time, an estimate from earlier passing runs, and a Stop button. Checks also work for projects without GitHub.
+- **Merging waits for green CI**: merging is blocked (and refused by the app itself) while GitHub checks are running or after they failed.
+- Background errors show as a message instead of a crash dialog.
+
 ## v0.1.0 — 2026-11-18
 
 First public release of Spindle / Make — from idea to pull request in one app.

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AgentKind, AgentStatus, ChatItem, CheckResult, DeployState, Feature, IntegrationStatus, ModelCatalog, PendingRequest, PermissionMode, ProcessInfo, Project, Settings, ThreadKind, UpdateState } from '@shared/types'
+import type { AgentKind, AgentStatus, ChatItem, ChecksProgress, DeployState, Feature, IntegrationStatus, ModelCatalog, PendingRequest, PermissionMode, ProcessInfo, Project, Settings, ThreadKind, UpdateState } from '@shared/types'
 
 export interface Toast {
   id: number
@@ -50,7 +50,7 @@ interface State {
   /** bumps when new mail is captured */
   mailTick: number
   /** live "Check changes" runs per thread */
-  checks: Record<string, { running: boolean; results: CheckResult[] }>
+  checks: Record<string, ChecksProgress>
   view: 'thread' | 'new'
   draft: Draft
   selectedFeatureId: string | null
@@ -61,6 +61,10 @@ interface State {
   modelPickerOpen: boolean
   /** app self-update state */
   update: UpdateState | null
+  /** when each thread's current/last agent turn started and ended */
+  turns: Record<string, { startedAt?: number; endedAt?: number }>
+  /** threads whose agent finished while you weren't looking (finish time) */
+  unseen: Record<string, number>
   /** bump to ask the composer to take focus */
   focusTick: number
   toasts: Toast[]
@@ -68,6 +72,7 @@ interface State {
   fsTick: Record<string, number>
   init(): Promise<void>
   select(id: string | null): void
+  markSeen(id: string): void
   startNew(kind: ThreadKind, projectId?: string | null): void
   setDraft(patch: Partial<Draft>): void
   setRightTab(t: RightTab): void
@@ -86,7 +91,7 @@ interface State {
 }
 
 let toastId = 0
-const LS = { selected: 'sf.selectedFeature', right: 'sf.rightOpen', sidebar: 'sf.sidebarOpen', draft: 'sf.draft' }
+const LS = { selected: 'sf.selectedFeature', right: 'sf.rightOpen', sidebar: 'sf.sidebarOpen', draft: 'sf.draft', unseen: 'sf.unseen' }
 const read = <T,>(k: string, d: T): T => {
   try {
     const v = localStorage.getItem(k)
@@ -129,6 +134,8 @@ export const useStore = create<State>((set, get) => ({
   modal: null,
   modelPickerOpen: false,
   update: null,
+  turns: {},
+  unseen: read<Record<string, number>>(LS.unseen, {}),
   focusTick: 0,
   toasts: [],
   fsTick: {},
@@ -158,6 +165,7 @@ export const useStore = create<State>((set, get) => ({
       models,
       draft: { ...draft },
       statuses: Object.fromEntries(statuses.map((s) => [s.featureId, s])),
+      turns: Object.fromEntries(statuses.filter((s) => s.running).map((s) => [s.featureId, { startedAt: Date.now() }])),
       requests,
       processes: Object.fromEntries(processes.map((p) => [p.id, p])),
       deploys: Object.fromEntries(deploys.map((d) => [`${d.projectId}:${d.envId}`, d])),
@@ -182,6 +190,19 @@ export const useStore = create<State>((set, get) => ({
       }
     })
     window.api.on('agent:status', (s) => {
+      const was = get().statuses[s.featureId]?.running ?? false
+      const turn = get().turns[s.featureId] ?? {}
+      if (!was && s.running) set({ turns: { ...get().turns, [s.featureId]: { startedAt: Date.now() } } })
+      if (was && !s.running) {
+        set({ turns: { ...get().turns, [s.featureId]: { ...turn, endedAt: Date.now() } } })
+        // Finished while you were elsewhere: mark it, so the sidebar and Dock show it's your turn there.
+        const looking = get().view === 'thread' && get().selectedFeatureId === s.featureId && document.hasFocus()
+        if (!looking) {
+          const unseen = { ...get().unseen, [s.featureId]: Date.now() }
+          set({ unseen })
+          write(LS.unseen, unseen)
+        }
+      }
       set({ statuses: { ...get().statuses, [s.featureId]: s } })
       if (!s.running) set({ fsTick: { ...get().fsTick, [s.featureId]: (get().fsTick[s.featureId] ?? 0) + 1 } })
     })
@@ -227,7 +248,7 @@ export const useStore = create<State>((set, get) => ({
       set({ mailTick: get().mailTick + 1 })
       get().toast('info', `📬 Email captured: “${m.subject}” to ${m.to[0] ?? ''}`)
     })
-    window.api.on('checks:changed', ({ featureId, running, results }) => set({ checks: { ...get().checks, [featureId]: { running, results } } }))
+    window.api.on('checks:changed', (c) => set({ checks: { ...get().checks, [c.featureId]: c } }))
     window.api.on('deploy:changed', (d) => set({ deploys: { ...get().deploys, [`${d.projectId}:${d.envId}`]: d } }))
     window.api.on('project:changed', (p) => get().upsertProject(p))
     window.api.on('settings:changed', (s) => set({ settings: s }))
@@ -236,10 +257,17 @@ export const useStore = create<State>((set, get) => ({
 
   select(id) {
     set({ selectedFeatureId: id, view: id ? 'thread' : 'new', modelPickerOpen: false })
+    if (id && get().unseen[id]) get().markSeen(id)
     write(LS.selected, id)
     if (id && !get().threads[id]) void get().loadThread(id)
     if (id) void window.api.ensureServices(id).catch(() => {})
     get().focusComposer()
+  },
+
+  markSeen(id) {
+    const { [id]: _gone, ...rest } = get().unseen
+    set({ unseen: rest })
+    write(LS.unseen, rest)
   },
 
   startNew(kind, projectId) {

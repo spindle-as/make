@@ -47,6 +47,7 @@ function PermissionCard({ req, focus }: { req: PendingRequest; focus: boolean })
       tabIndex={-1}
       onKeyDown={onKey}
       role="alertdialog"
+      data-request-card
       aria-label={`${req.title}: ${req.detail}`}
       className="pop-in rounded-2xl border border-warn/40 bg-warn/[0.06] p-4 shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-warn/60"
     >
@@ -125,6 +126,7 @@ function QuestionCard({ req, focus }: { req: PendingRequest; focus: boolean }) {
       tabIndex={-1}
       onKeyDown={onKey}
       role="dialog"
+      data-request-card
       aria-label="The agent has a question"
       className="pop-in rounded-2xl border border-accent/40 bg-accent/[0.06] p-4 shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
     >

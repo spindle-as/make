@@ -35,6 +35,8 @@ function tabsFor(feature: Feature, creator: boolean): RightTab[] {
 }
 
 const LS_WIDTH = 'sf.rightWidth'
+/** How many threads keep a live preview while you look elsewhere. */
+const KEEP_ALIVE = 4
 
 export function RightPanel({ feature, project }: { feature: Feature; project: Project }) {
   const creator = useIsCreator()
@@ -43,6 +45,27 @@ export function RightPanel({ feature, project }: { feature: Feature; project: Pr
   const stored = useStore((s) => s.rightTab)
   const tab = available.includes(stored) ? stored : available[0]
   const setTab = useStore((s) => s.setRightTab)
+  const features = useStore((s) => s.features)
+  const projects = useStore((s) => s.projects)
+  // Threads whose preview has been opened (a few are kept alive). The list keeps a stable order:
+  // reordering would move <webview> elements in the DOM, and a moved webview reloads its page.
+  const [keep, setKeep] = useState<string[]>([])
+  const lastUsed = useRef(new Map<string, number>())
+  useEffect(() => {
+    if (tab !== 'preview' || !available.includes('preview')) return
+    lastUsed.current.set(feature.id, Date.now())
+    setKeep((k) => {
+      if (k.includes(feature.id)) return k
+      let next = [...k, feature.id]
+      while (next.length > KEEP_ALIVE) {
+        // Drop the least recently used one (never the one being opened).
+        const oldest = next.filter((x) => x !== feature.id).sort((a, b) => (lastUsed.current.get(a) ?? 0) - (lastUsed.current.get(b) ?? 0))[0]
+        next = next.filter((x) => x !== oldest)
+        lastUsed.current.delete(oldest)
+      }
+      return next
+    })
+  }, [tab, feature.id, available])
   const [width, setWidth] = useState(() => {
     try {
       return Number(localStorage.getItem(LS_WIDTH)) || 600
@@ -115,15 +138,30 @@ export function RightPanel({ feature, project }: { feature: Feature; project: Pr
           </button>
         ))}
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
+        {/* Previews stay alive (hidden) when you switch tabs or threads: logins, OTP steps and forms keep their state. */}
+        {keep.map((id) => {
+          const f = features.find((x) => x.id === id)
+          const p = f && projects.find((x) => x.id === f.projectId)
+          if (!f || !p) return null
+          const visible = id === feature.id && tab === 'preview'
+          return (
+            <div key={id} className={clsx('absolute inset-0', !visible && 'pointer-events-none invisible')} aria-hidden={!visible}>
+              <PreviewPanel feature={f} project={p} active={visible} />
+            </div>
+          )
+        })}
+        {tab !== 'preview' && (
+          <div className="absolute inset-0">
         {tab === 'changes' && <ChangesPanel feature={feature} />}
-        {tab === 'preview' && <PreviewPanel feature={feature} project={project} />}
         {tab === 'ship' && (creator ? <ReviewPanel feature={feature} project={project} /> : <ShipPanel feature={feature} project={project} />)}
         {tab === 'email' && <MailPanel feature={feature} />}
         {tab === 'data' && <DataPanel feature={feature} />}
         {tab === 'logs' && <LogsPanel feature={feature} project={project} />}
         {tab === 'terminal' && <TerminalPanel feature={feature} project={project} />}
         {tab === 'setup' && <SetupPanel feature={feature} />}
+          </div>
+        )}
       </div>
     </div>
   )

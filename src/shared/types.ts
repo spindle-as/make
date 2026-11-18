@@ -172,6 +172,19 @@ export interface CheckResult {
   summary: string
 }
 
+/** Live state of a "Check changes" run. */
+export interface ChecksProgress {
+  featureId: string
+  running: boolean
+  results: CheckResult[]
+  /** every check in this run, in order */
+  plan?: { name: string; command: string }[]
+  /** the check running right now (its process streams output) */
+  current?: { name: string; command: string; processId: string; startedAt: number }
+  startedAt?: number
+  cancelled?: boolean
+}
+
 export interface Attachment {
   mediaType: 'image/png' | 'image/jpeg'
   /** base64 without the data: prefix */
@@ -658,6 +671,8 @@ export interface Api {
   setSecret(key: 'ploi', value: string): Promise<void>
   checkTools(): Promise<ToolHealth[]>
   updateState(): Promise<UpdateState>
+  /** Dock badge: threads waiting on you */
+  setBadge(count: number): Promise<void>
   checkForUpdates(): Promise<UpdateState>
   downloadUpdate(): Promise<UpdateState>
   /** quits, swaps the app bundle and relaunches */
@@ -696,6 +711,7 @@ export interface Api {
   dbReset(featureId: string): Promise<string>
 
   // review
+  cancelChecks(featureId: string): Promise<void>
   checkChanges(featureId: string): Promise<CheckResult[]>
   draftPr(featureId: string): Promise<{ title: string; body: string }>
   addVisualNote(featureId: string, note: string): Promise<void>
@@ -806,6 +822,6 @@ export interface Events {
   'toast': { kind: 'info' | 'success' | 'error'; message: string }
   'settings:changed': Settings
   'mail:received': MailSummary
-  'checks:changed': { featureId: string; running: boolean; results: CheckResult[] }
+  'checks:changed': ChecksProgress
   'update:changed': UpdateState
 }

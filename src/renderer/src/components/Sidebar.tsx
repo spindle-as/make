@@ -43,6 +43,7 @@ function ThreadRow({ f, index }: { f: Feature; index: number }) {
   const selected = useStore((s) => s.view === 'thread' && s.selectedFeatureId === f.id)
   const running = useStore((s) => s.statuses[f.id]?.running)
   const waiting = useStore((s) => s.requests[f.id]?.length ?? 0)
+  const unseen = useStore((s) => !!s.unseen[f.id])
   const select = useStore((s) => s.select)
   const isChat = f.kind === 'chat'
   return (
@@ -66,6 +67,8 @@ function ThreadRow({ f, index }: { f: Feature; index: number }) {
             <span className="font-medium text-warn">Needs you</span>
           ) : running ? (
             <span className="text-accent-strong">Working…</span>
+          ) : unseen ? (
+            <span className="font-medium text-ok">Done — your turn</span>
           ) : isChat ? (
             <span>Chat</span>
           ) : (
@@ -80,7 +83,8 @@ function ThreadRow({ f, index }: { f: Feature; index: number }) {
           {waiting}
         </span>
       )}
-      {index < 9 && !waiting && (
+      {unseen && !waiting && !running && <span className="size-2.5 shrink-0 rounded-full bg-ok" aria-label="Finished — not seen yet" />}
+      {index < 9 && !waiting && !unseen && (
         <span className="hidden text-2xs text-faint tabular-nums group-hover:inline" aria-hidden>
           ⌘{index + 1}
         </span>

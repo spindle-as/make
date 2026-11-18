@@ -1,8 +1,9 @@
 import clsx from 'clsx'
 import { Check, ChevronRight, CircleDashed, ExternalLink, GitMerge, GitPullRequest, Lock, RefreshCw, ShieldCheck, Sparkles, Wand2, X } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { ciGate } from '@shared/ci'
 import type { CheckResult, Feature, Project, PullRequestInfo } from '@shared/types'
 import { EnvDeployCard } from '../components/DeployStatus'
 import { RoleBadge } from '../components/OpenProject'
@@ -12,44 +13,130 @@ import { act, useStore } from '../store'
 
 const EMPTY: CheckResult[] = []
 
+const fmt = (ms: number) => {
+  const s = Math.max(0, Math.round(ms / 1000))
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+}
+
+/** Re-render every second while something is running. */
+function useTicker(on: boolean): number {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    if (!on) return
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [on])
+  return now
+}
+
 export function ChecksSection({ feature }: { feature: Feature }) {
   const w = useWords()
   const live = useStore((s) => s.checks[feature.id])
-  const results = live?.results.length ? live.results : latest(feature.checks ?? EMPTY)
   const running = live?.running ?? false
+  const history = feature.checks ?? EMPTY
+  // A run in progress or stopped shows its own results; otherwise the latest result per check.
+  const results = live && (live.results.length || running || live.cancelled) ? live.results : latest(history)
   const [open, setOpen] = useState<string | null>(null)
+  const [showOutput, setShowOutput] = useState(true)
+  const now = useTicker(running)
+  const current = running ? live?.current : undefined
+  const output = useStore((s) => (current ? (s.procOutput[current.processId] ?? '') : ''))
   const failing = results.filter((r) => !r.ok)
+  // How long each check took last time — used for an honest estimate, not a fake progress bar.
+  // Only runs that passed are representative (a failure can end in a second); tiny ones aren't worth showing.
+  const lastDuration = (name: string) => {
+    const d = [...history].reverse().find((r) => r.name === name && r.ok)?.durationMs
+    return d !== undefined && d >= 2000 ? d : undefined
+  }
+  const plan = live?.plan ?? results.map((r) => ({ name: r.name, command: r.command }))
+  const remainingEstimate = running
+    ? plan
+        .filter((p) => !results.some((r) => r.name === p.name))
+        .reduce((sum, p) => {
+          const d = lastDuration(p.name)
+          if (d === undefined) return NaN
+          return sum + (p.name === current?.name ? Math.max(0, d - (now - current.startedAt)) : d)
+        }, 0)
+    : NaN
+  const done = results.length
+
   return (
     <section className="rounded-2xl border border-line bg-raised/40 p-4">
       <div className="flex items-center gap-3">
         <span className="flex size-7 items-center justify-center rounded-full bg-hover text-sm font-semibold">1</span>
         <div className="min-w-0 flex-1">
           <div className="text-base font-medium">{w.checks}</div>
-          <div className="text-sm text-muted">Runs the project’s tests and quality checks on this change.</div>
+          <div className="text-sm text-muted">
+            {running
+              ? `Check ${Math.min(done + 1, plan.length)} of ${plan.length} · ${fmt(now - (live?.startedAt ?? now))} so far${Number.isFinite(remainingEstimate) ? ` · about ${fmt(remainingEstimate)} left` : ''}`
+              : live?.cancelled
+                ? `Stopped after ${done} of ${plan.length}.`
+                : 'Runs the project’s tests and quality checks on this change. You can keep working while they run.'}
+          </div>
         </div>
-        <Button variant={results.length ? 'secondary' : 'primary'} loading={running} icon={<ShieldCheck className="size-4" />} onClick={() => void act(() => window.api.checkChanges(feature.id))}>
-          {results.length ? 'Check again' : w.checks}
-        </Button>
+        {running ? (
+          <Button variant="secondary" icon={<X className="size-4" />} onClick={() => void act(() => window.api.cancelChecks(feature.id), 'Stopping the checks')}>
+            Stop
+          </Button>
+        ) : (
+          <Button variant={results.length ? 'secondary' : 'primary'} icon={<ShieldCheck className="size-4" />} onClick={() => void act(() => window.api.checkChanges(feature.id))}>
+            {results.length ? 'Check again' : w.checks}
+          </Button>
+        )}
       </div>
-      {results.length > 0 && (
+      {running && plan.length > 0 && (
+        <div className="mt-3 flex gap-1" aria-hidden>
+          {plan.map((p) => {
+            const r = results.find((x) => x.name === p.name)
+            return <div key={p.name} className={clsx('h-1.5 flex-1 rounded-full', r ? (r.ok ? 'bg-ok' : 'bg-bad') : p.name === current?.name ? 'pulse bg-accent' : 'bg-hover')} />
+          })}
+        </div>
+      )}
+      {plan.length > 0 && (
         <ul className="mt-3 flex flex-col gap-1">
-          {results.map((r) => (
-            <li key={r.name}>
-              <button type="button" onClick={() => setOpen(open === r.name ? null : r.name)} className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover">
-                {r.ok ? <Check className="size-4 text-ok" /> : <X className="size-4 text-bad" />}
-                <span className="text-sm">{r.name}</span>
-                <code className="truncate font-mono text-xs text-faint">{r.command}</code>
-                <span className="ml-auto text-xs text-faint">{r.ok ? 'passed' : 'needs fixing'}</span>
-                <ChevronRight className={clsx('size-4 text-faint transition-transform', open === r.name && 'rotate-90')} />
-              </button>
-              {open === r.name && <pre className="selectable mx-2 mb-2 max-h-56 overflow-auto rounded-lg bg-bg p-2.5 font-mono text-xs whitespace-pre-wrap text-muted">{r.summary}</pre>}
-            </li>
-          ))}
-          {running && (
-            <li className="flex items-center gap-2.5 px-2 py-1.5 text-sm text-muted">
-              <Spinner /> Checking…
-            </li>
-          )}
+          {plan.map((p) => {
+            const r = results.find((x) => x.name === p.name)
+            const isCurrent = running && p.name === current?.name
+            const last = lastDuration(p.name)
+            return (
+              <li key={p.name}>
+                <button
+                  type="button"
+                  disabled={!r && !isCurrent}
+                  onClick={() => (isCurrent ? setShowOutput(!showOutput) : setOpen(open === p.name ? null : p.name))}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left enabled:hover:bg-hover"
+                >
+                  {r ? (
+                    r.ok ? (
+                      <Check className="size-4 text-ok" />
+                    ) : (
+                      <X className="size-4 text-bad" />
+                    )
+                  ) : isCurrent ? (
+                    <Spinner className="text-accent-strong" />
+                  ) : (
+                    <CircleDashed className="size-4 text-faint" />
+                  )}
+                  <span className={clsx('text-sm', !r && !isCurrent && 'text-faint')}>{p.name}</span>
+                  <code className="truncate font-mono text-xs text-faint">{p.command}</code>
+                  <span className="ml-auto shrink-0 text-xs text-faint tabular-nums">
+                    {r
+                      ? `${r.ok ? 'passed' : 'needs fixing'} · ${fmt(r.durationMs)}`
+                      : isCurrent
+                        ? `running · ${fmt(now - current!.startedAt)}${last ? ` (last time ${fmt(last)})` : ''}`
+                        : running
+                          ? last
+                            ? `waiting · ~${fmt(last)}`
+                            : 'waiting'
+                          : 'skipped'}
+                  </span>
+                  {(r || isCurrent) && <ChevronRight className={clsx('size-4 text-faint transition-transform', (isCurrent ? showOutput : open === p.name) && 'rotate-90')} />}
+                </button>
+                {isCurrent && showOutput && <LiveOutput text={output} />}
+                {r && open === p.name && <pre className="selectable mx-2 mb-2 max-h-56 overflow-auto rounded-lg bg-bg p-2.5 font-mono text-xs whitespace-pre-wrap text-muted">{r.summary}</pre>}
+              </li>
+            )
+          })}
         </ul>
       )}
       {failing.length > 0 && !running && (
@@ -73,6 +160,20 @@ export function ChecksSection({ feature }: { feature: Feature }) {
         </Button>
       )}
     </section>
+  )
+}
+
+/** The running check's output, following the end like a terminal. */
+function LiveOutput({ text }: { text: string }) {
+  const ref = useRef<HTMLPreElement>(null)
+  const lines = text.split('\n').slice(-200).join('\n')
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight
+  }, [lines])
+  return (
+    <pre ref={ref} className="selectable mx-2 mb-2 max-h-56 overflow-auto rounded-lg bg-bg p-2.5 font-mono text-xs whitespace-pre-wrap text-muted">
+      {lines.trim() || 'Starting…'}
+    </pre>
   )
 }
 
@@ -123,14 +224,13 @@ export function ReviewPanel({ feature, project }: { feature: Feature; project: P
 
   const merge = async () => {
     if (!pr) return
-    const failing = pr.checks.filter((c) => c.bucket === 'fail')
-    if (failing.length && !confirm(`${failing.length} automatic check(s) failed on GitHub. ${w.merge} anyway?`)) return
     setBusy('merge')
     await act(() => window.api.mergePr(feature.id), 'Changes applied')
     setBusy('')
     void refresh()
   }
 
+  const gate = ciGate(pr?.checks ?? [])
   const ciPending = pr?.checks.some((c) => c.bucket === 'pending')
   useEffect(() => {
     if (!ciPending) return
@@ -138,8 +238,23 @@ export function ReviewPanel({ feature, project }: { feature: Feature; project: P
     return () => clearInterval(t)
   }, [ciPending, refresh])
 
+  // Checks run locally, so they work without GitHub; only submitting needs a repository.
   if (!project.githubRepo) {
-    return <div className="p-6 text-sm text-muted">This project isn’t connected to GitHub, so it can’t be submitted for review. Add a GitHub repository in project settings.</div>
+    return (
+      <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
+        <ChecksSection feature={feature} />
+        <div className="rounded-2xl border border-dashed border-line-strong p-4 text-sm text-muted">
+          To submit this for review, connect the project to GitHub: add the repository in project settings.
+          <button
+            type="button"
+            className="ml-1.5 font-medium text-accent-strong hover:underline"
+            onClick={() => useStore.getState().openModal({ kind: 'project', projectId: project.id })}
+          >
+            Open project settings
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -257,9 +372,11 @@ export function ReviewPanel({ feature, project }: { feature: Feature; project: P
               <span className="flex size-7 items-center justify-center rounded-full bg-hover text-sm font-semibold">3</span>
               <div className="min-w-0 flex-1">
                 <div className="text-base font-medium">{w.merge}</div>
-                <div className="text-sm text-muted">Adds the change to the main version of the project. GitHub’s own rules still apply.</div>
+                <div className={clsx('text-sm', gate.ok ? 'text-muted' : gate.state === 'failed' ? 'text-bad' : 'text-warn')}>
+                  {gate.ok ? 'Adds the change to the main version of the project. GitHub’s own rules still apply.' : gate.state === 'running' ? 'Waiting for the automatic checks on GitHub to finish — this unlocks when they pass.' : 'The automatic checks on GitHub failed. Fix them first (use Fix with AI above), then this unlocks.'}
+                </div>
               </div>
-              <Button variant="success" icon={<GitMerge className="size-4" />} loading={busy === 'merge'} onClick={merge} disabled={pr.isDraft || pr.mergeable === 'CONFLICTING'}>
+              <Button variant="success" icon={<GitMerge className="size-4" />} loading={busy === 'merge'} onClick={merge} disabled={pr.isDraft || pr.mergeable === 'CONFLICTING' || !gate.ok} title={gate.reason}>
                 {w.merge}
               </Button>
             </div>

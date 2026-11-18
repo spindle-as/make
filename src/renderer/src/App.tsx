@@ -1,3 +1,4 @@
+import clsx from 'clsx'
 import { useEffect } from 'react'
 import { ArchiveDialog } from './components/ArchiveDialog'
 import { Chat } from './components/Chat'
@@ -17,6 +18,27 @@ import { Toasts } from './components/Toasts'
 import { runAction } from './lib/actions'
 import { matchShortcut } from './lib/shortcuts'
 import { useSelected, useStore } from './store'
+
+/** Dock badge = threads that need you (a question/approval, or finished while you were away). */
+function useAttentionBadge() {
+  const count = useStore((s) => {
+    const ids = new Set<string>(Object.keys(s.unseen))
+    for (const [id, r] of Object.entries(s.requests)) if (r.length) ids.add(id)
+    return [...ids].filter((id) => s.features.some((f) => f.id === id)).length
+  })
+  useEffect(() => {
+    void window.api.setBadge(count).catch(() => {})
+  }, [count])
+  // Coming back to the window counts as seeing the thread you're on.
+  useEffect(() => {
+    const onFocus = () => {
+      const s = useStore.getState()
+      if (s.view === 'thread' && s.selectedFeatureId && s.unseen[s.selectedFeatureId]) s.markSeen(s.selectedFeatureId)
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
+}
 
 /** One keydown listener for the whole app; menu items route to the same actions. */
 function useGlobalKeys() {
@@ -50,13 +72,13 @@ export default function App() {
   const sidebarOpen = useStore((s) => s.sidebarOpen)
   const view = useStore((s) => s.view)
   const onboarded = useStore((s) => s.settings?.onboarded ?? true)
-  const rightTab = useStore((s) => s.rightTab)
   const { feature, project } = useSelected()
 
   useEffect(() => {
     void init()
   }, [init])
   useGlobalKeys()
+  useAttentionBadge()
 
   if (!ready) return <div className="drag h-full" />
   const close = () => openModal(null)
@@ -84,10 +106,13 @@ export default function App() {
                 <Chat feature={feature} />
               </ErrorBoundary>
             </div>
-            {rightOpen && project && (
-              <ErrorBoundary label="Panel" resetKey={feature.id + rightTab}>
-                <RightPanel feature={feature} project={project} />
-              </ErrorBoundary>
+            {/* Kept mounted while hidden, so the preview (logins, OTP flows, form state) survives closing the panel. */}
+            {project && (
+              <div className={clsx('flex', !rightOpen && 'pointer-events-none invisible w-0 overflow-hidden')} aria-hidden={!rightOpen}>
+                <ErrorBoundary label="Panel" resetKey={feature.id}>
+                  <RightPanel feature={feature} project={project} />
+                </ErrorBoundary>
+              </div>
             )}
           </>
         ) : (

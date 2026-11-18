@@ -24,6 +24,7 @@ import type {
   ServiceDef,
   ToolHealth
 } from '@shared/types'
+import { ciGate } from '@shared/ci'
 import { setEnvValue, slugFromPrompt, slugify, titleFromPrompt, truncate, uid } from '@shared/util'
 import { AgentManager } from './agents'
 import { exec, run, shell, shellQuote } from './exec'
@@ -79,6 +80,8 @@ export class Factory {
   readonly processes: ProcessManager
   readonly mail: MailCatcher
   private checksRunning = new Set<string>()
+  private checksCancelled = new Set<string>()
+  private checksCurrent = new Map<string, string>()
   readonly ca: LocalCA
   readonly web: WebServer
   private webError = ''
@@ -618,25 +621,47 @@ export class Factory {
     if (!defs.length) throw new Error('No checks found for this project (no tests, linters or build script).')
     this.checksRunning.add(featureId)
     const results: CheckResult[] = []
-    this.emit('checks:changed', { featureId, running: true, results })
+    const plan = defs.map((d) => ({ name: d.name, command: d.command }))
+    const startedAt = Date.now()
+    this.checksCancelled.delete(featureId)
+    this.emit('checks:changed', { featureId, running: true, results, plan, startedAt })
     try {
       for (const def of defs) {
+        if (this.checksCancelled.has(featureId)) break
         const t0 = Date.now()
         const proc = this.processes.start(featureId, `Check: ${def.name}`, def.command, 'command', f.worktreePath, { ...runEnv, APP_ENV: 'testing' })
+        this.checksCurrent.set(featureId, proc.id)
+        this.emit('checks:changed', { featureId, running: true, results: [...results], plan, startedAt, current: { name: def.name, command: def.command, processId: proc.id, startedAt: t0 } })
         const done = await this.processes.wait(proc.id)
+        if (this.checksCancelled.has(featureId)) break
         const out = this.processes.output(proc.id)
         results.push({ name: def.name, command: def.command, ok: done.code === 0, code: done.code ?? null, at: Date.now(), durationMs: Date.now() - t0, summary: out.split('\n').slice(-30).join('\n') })
-        this.emit('checks:changed', { featureId, running: true, results: [...results] })
+        this.emit('checks:changed', { featureId, running: true, results: [...results], plan, startedAt })
       }
     } finally {
       this.checksRunning.delete(featureId)
+      this.checksCurrent.delete(featureId)
+    }
+    if (this.checksCancelled.has(featureId)) {
+      this.checksCancelled.delete(featureId)
+      this.addSystemItem(featureId, `Checks stopped after ${results.length} of ${plan.length}.`)
+      this.emit('checks:changed', { featureId, running: false, results, plan, startedAt, cancelled: true })
+      return results
     }
     const cur = store().feature(featureId)
     this.saveFeature({ ...cur, checks: [...(cur.checks ?? []), ...results].slice(-30) })
     const failed = results.filter((r) => !r.ok)
     this.addSystemItem(featureId, failed.length ? `Checks: ${results.length - failed.length} passed, ${failed.length} need fixing (${failed.map((x) => x.name).join(', ')})` : `Checks: all ${results.length} passed`, failed.length ? 'error' : 'system')
-    this.emit('checks:changed', { featureId, running: false, results })
+    this.emit('checks:changed', { featureId, running: false, results, plan, startedAt })
     return results
+  }
+
+  /** Stop a running "Check changes": the current check is killed and the rest are skipped. */
+  async cancelChecks(featureId: string): Promise<void> {
+    if (!this.checksRunning.has(featureId)) return
+    this.checksCancelled.add(featureId)
+    const id = this.checksCurrent.get(featureId)
+    if (id) await this.processes.stop(id)
   }
 
   async draftPr(featureId: string): Promise<{ title: string; body: string }> {
@@ -1442,6 +1467,10 @@ export class Factory {
     }
     const num = f.prNumber ?? (await github.findPrForBranch(repo, f.branch))
     if (!num) throw new Error('No pull request found for this feature')
+    // Enforced here, not just in the UI: never merge while CI runs or after it failed.
+    const [prNow, runs] = await Promise.all([github.viewPr(repo, num), github.listRuns(repo, f.branch).catch(() => [])])
+    const gate = ciGate(prNow.checks, runs)
+    if (!gate.ok) throw new Error(gate.reason)
     const out = await github.mergePr(repo, num, s.mergeMethod)
     if (s.deleteBranchOnMerge) await github.deleteRemoteBranch(f.worktreePath, f.branch)
     this.saveFeature({ ...store().feature(featureId), stage: 'merged' })
