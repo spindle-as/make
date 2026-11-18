@@ -1,7 +1,7 @@
 {
   "name": "spindle-make",
   "productName": "Spindle Make",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Spindle / Make — from idea to pull request in one app. Powered by jsj.",
   "main": "out/main/index.js",
   "author": {

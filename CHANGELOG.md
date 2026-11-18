@@ -4,6 +4,8 @@ All notable changes to Spindle Make. `npm run release` moves the **Unreleased** 
 
 ## Unreleased
 
+## v0.1.2 — 2026-11-18
+
 - **Start changes from the live app**: *Start a change* now shows your project's main version running next to the description box. Point at anything in it, say what should change, and *Start a change* turns those notes (with screenshots) into a new change in its own workspace. The main version stays current: it fast-forwards to the latest main when it's clean, and refreshes packages, assets and migrations only when they changed.
 - **Fixed: "Couldn't store the secret: the macOS Keychain isn't available."** Keychain access no longer blocks the app or times out behind a prompt, and if saving ever fails you now see macOS's actual reason.
 
