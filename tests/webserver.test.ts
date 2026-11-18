@@ -9,7 +9,7 @@ import { connect as tlsConnect } from 'node:tls'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { LocalCA, PHP_ROUTER, WebServer, freePort, siteHost, waitForPort, type Site } from '../src/main/webserver'
+import { LocalCA, OPENSSL, PHP_ROUTER, WebServer, freePort, siteHost, waitForPort, type Site } from '../src/main/webserver'
 
 const root = mkdtempSync(join(tmpdir(), 'sf-web-'))
 const procs: ChildProcess[] = []
@@ -90,13 +90,13 @@ describe('built-in web server', () => {
 
   it('issues certificates signed by the local CA for each hostname', async () => {
     const { cert } = await ca.issue('csv-export.demo-shop.localhost')
-    const text = execFileSync('openssl', ['x509', '-in', cert, '-noout', '-text'], { encoding: 'utf8' })
+    const text = execFileSync(OPENSSL, ['x509', '-in', cert, '-noout', '-text'], { encoding: 'utf8' })
     expect(text).toContain('DNS:csv-export.demo-shop.localhost')
     expect(text).toContain('Spindle Local CA')
     expect(ca.fingerprint()).toMatch(/^sha256\//)
     // The chain must hold up for both OpenSSL and Node's own X.509 checks.
     const caPath = join(root, 'certs', 'ca.pem')
-    expect(execFileSync('openssl', ['verify', '-CAfile', caPath, cert], { encoding: 'utf8' })).toContain(': OK')
+    expect(execFileSync(OPENSSL, ['verify', '-CAfile', caPath, cert], { encoding: 'utf8' })).toContain(': OK')
     const leaf = new X509Certificate(readFileSync(cert))
     const issuer = new X509Certificate(ca.pem())
     expect(leaf.checkIssued(issuer)).toBe(true)

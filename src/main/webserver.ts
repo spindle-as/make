@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createHash, X509Certificate } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import http, { type IncomingMessage, type ServerResponse } from 'node:http'
 import https from 'node:https'
 import { connect, createServer as createNetServer, type Socket } from 'node:net'
@@ -14,6 +14,12 @@ import { exec, run } from './exec'
  * A local certificate authority (like Herd/Valet). Site certificates are issued on
  * demand per hostname and served via SNI, so every site gets a valid HTTPS cert.
  */
+/**
+ * The openssl used for the local CA. macOS's own (/usr/bin, LibreSSL) ships on every Mac and works;
+ * whatever is first on PATH might be an old OpenSSL 1.1.1 whose certificates don't chain to our CA.
+ */
+export const OPENSSL = existsSync('/usr/bin/openssl') ? '/usr/bin/openssl' : 'openssl'
+
 export class LocalCA {
   readonly keyFile: string
   readonly certFile: string
@@ -38,9 +44,9 @@ export class LocalCA {
   }
 
   private async create(): Promise<void> {
-    await run('openssl', ['ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', this.keyFile])
+    await run(OPENSSL, ['ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', this.keyFile])
     const user = process.env.USER || 'local'
-    await run('openssl', [
+    await run(OPENSSL, [
       'req', '-x509', '-new', '-key', this.keyFile, '-sha256', '-days', '3650', '-out', this.certFile,
       '-subj', `/O=Spindle Make/CN=Spindle Local CA (${user})`,
       '-addext', 'basicConstraints=critical,CA:TRUE,pathlen:0',
@@ -76,14 +82,21 @@ export class LocalCA {
     await this.ensure()
     const csr = join(this.dir, 'sites', `${host}.csr`)
     const ext = join(this.dir, 'sites', `${host}.ext`)
-    await run('openssl', ['ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', key])
-    await run('openssl', ['req', '-new', '-key', key, '-out', csr, '-subj', `/CN=${host}`])
+    await run(OPENSSL, ['ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', key])
+    await run(OPENSSL, ['req', '-new', '-key', key, '-out', csr, '-subj', `/CN=${host}`])
     writeFileSync(
       ext,
       [`subjectAltName=DNS:${host}`, 'basicConstraints=critical,CA:FALSE', 'keyUsage=critical,digitalSignature', 'extendedKeyUsage=serverAuth'].join('\n')
     )
     // 397 days keeps within Apple's limit for TLS server certificates.
-    await run('openssl', ['x509', '-req', '-in', csr, '-CA', this.certFile, '-CAkey', this.keyFile, '-CAcreateserial', '-out', cert, '-days', '397', '-sha256', '-extfile', ext])
+    await run(OPENSSL, ['x509', '-req', '-in', csr, '-CA', this.certFile, '-CAkey', this.keyFile, '-CAcreateserial', '-out', cert, '-days', '397', '-sha256', '-extfile', ext])
+    // Check the chain now, so a broken toolchain fails here with a clear message instead of as a TLS error.
+    const leaf = new X509Certificate(readFileSync(cert))
+    const issuer = new X509Certificate(readFileSync(this.certFile))
+    if (!leaf.checkIssued(issuer) || !leaf.verify(issuer.publicKey)) {
+      rmSync(cert, { force: true })
+      throw new Error(`The certificate for ${host} doesn’t chain to Spindle’s local CA (made with ${OPENSSL}).`)
+    }
     return { key, cert }
   }
 
