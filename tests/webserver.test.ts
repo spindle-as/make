@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { X509Certificate } from 'node:crypto'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import dns from 'node:dns'
 import http from 'node:http'
 import https from 'node:https'
@@ -93,6 +94,24 @@ describe('built-in web server', () => {
     expect(text).toContain('DNS:csv-export.demo-shop.localhost')
     expect(text).toContain('Spindle Local CA')
     expect(ca.fingerprint()).toMatch(/^sha256\//)
+    // The chain must hold up for both OpenSSL and Node's own X.509 checks.
+    const caPath = join(root, 'certs', 'ca.pem')
+    expect(execFileSync('openssl', ['verify', '-CAfile', caPath, cert], { encoding: 'utf8' })).toContain(': OK')
+    const leaf = new X509Certificate(readFileSync(cert))
+    const issuer = new X509Certificate(ca.pem())
+    expect(leaf.checkIssued(issuer)).toBe(true)
+    expect(leaf.verify(issuer.publicKey)).toBe(true)
+    expect(issuer.ca).toBe(true)
+  })
+
+  it('creates one CA even when the first requests arrive at the same time', async () => {
+    const fresh = new LocalCA(join(root, 'certs-concurrent'))
+    const hosts = ['a.demo.localhost', 'b.demo.localhost', 'a.demo.localhost', 'c.demo.localhost']
+    const issued = await Promise.all([fresh.ensure(), ...hosts.map((h) => fresh.issue(h))])
+    const issuer = new X509Certificate(fresh.pem())
+    for (const r of issued.slice(1) as { cert: string }[]) {
+      expect(new X509Certificate(readFileSync(r.cert)).verify(issuer.publicKey)).toBe(true)
+    }
   })
 
   it('serves a site over HTTPS by hostname, starting its PHP backend on first request', async () => {

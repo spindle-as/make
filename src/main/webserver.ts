@@ -25,8 +25,19 @@ export class LocalCA {
     this.certFile = join(dir, 'ca.pem')
   }
 
-  async ensure(): Promise<void> {
-    if (existsSync(this.keyFile) && existsSync(this.certFile)) return
+  private ensuring?: Promise<void>
+  private issuing = new Map<string, Promise<{ key: string; cert: string }>>()
+
+  /** Create the CA once. Concurrent callers share the same run, so two first requests can't make two CAs. */
+  ensure(): Promise<void> {
+    if (existsSync(this.keyFile) && existsSync(this.certFile)) return Promise.resolve()
+    this.ensuring ??= this.create().finally(() => {
+      this.ensuring = undefined
+    })
+    return this.ensuring
+  }
+
+  private async create(): Promise<void> {
     await run('openssl', ['ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', this.keyFile])
     const user = process.env.USER || 'local'
     await run('openssl', [
@@ -48,12 +59,20 @@ export class LocalCA {
     return readFileSync(this.certFile, 'utf8')
   }
 
-  /** Issue (or reuse) a certificate for one hostname. */
+  /** Issue (or reuse) a certificate for one hostname; concurrent requests for a host share one run. */
   async issue(host: string): Promise<{ key: string; cert: string }> {
     if (!/^[a-z0-9.-]+$/i.test(host)) throw new Error(`Invalid hostname ${host}`)
     const key = join(this.dir, 'sites', `${host}.key`)
     const cert = join(this.dir, 'sites', `${host}.pem`)
+    const pending = this.issuing.get(host)
+    if (pending) return pending
     if (existsSync(key) && existsSync(cert)) return { key, cert }
+    const p = this.doIssue(host, key, cert).finally(() => this.issuing.delete(host))
+    this.issuing.set(host, p)
+    return p
+  }
+
+  private async doIssue(host: string, key: string, cert: string): Promise<{ key: string; cert: string }> {
     await this.ensure()
     const csr = join(this.dir, 'sites', `${host}.csr`)
     const ext = join(this.dir, 'sites', `${host}.ext`)

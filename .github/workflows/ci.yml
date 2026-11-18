@@ -23,6 +23,11 @@ jobs:
         with:
           php-version: '8.4'
           coverage: none
+      - name: Tool versions
+        run: |
+          which -a openssl; openssl version
+          node -p "process.version + ' (OpenSSL ' + process.versions.openssl + ')'"
+          php -v | head -1
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
