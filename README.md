@@ -92,6 +92,7 @@ npm run dev        # development, with hot reload
 npm test           # unit + git/sqlite integration tests
 SF_LIVE=1 npx vitest run tests/github.live.test.ts                 # read-only gh checks
 SF_LIVE_DB=1 SF_DB_PORT=3308 npx vitest run tests/db.live.test.ts  # creates & drops sf_livetest_* on local MySQL
+SF_LIVE_UPDATE=1 npx vitest run tests/updater.live.test.ts        # downloads + verifies the latest GitHub release
 npm run dist       # builds dist/Spindle-Make-<version>-arm64.dmg (+ .zip for the updater)
 ```
 
