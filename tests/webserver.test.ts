@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import dns from 'node:dns'
 import http from 'node:http'
 import https from 'node:https'
 import { connect as tlsConnect } from 'node:tls'
@@ -15,10 +16,21 @@ let ca: LocalCA
 let server: WebServer
 let started = 0
 
+/**
+ * *.localhost resolves to loopback on macOS, but not on every machine (e.g. CI runners).
+ * Resolve it here the way macOS does, so the tests don't depend on the host's resolver.
+ */
+const localLookup = ((host: string, options: dns.LookupOptions, cb: (...a: unknown[]) => void) => {
+  if (host === 'localhost' || host.endsWith('.localhost')) {
+    return options.all ? cb(null, [{ address: '127.0.0.1', family: 4 }]) : cb(null, '127.0.0.1', 4)
+  }
+  return dns.lookup(host, options, cb as never)
+}) as unknown as typeof dns.lookup
+
 function get(url: string, opts: { ca?: string } = {}): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith('https') ? https : http
-    const req = mod.get(url, { ca: opts.ca } as https.RequestOptions, (res) => {
+    const req = mod.get(url, { ca: opts.ca, lookup: localLookup } as https.RequestOptions, (res) => {
       let body = ''
       res.on('data', (d) => (body += d))
       res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body }))
