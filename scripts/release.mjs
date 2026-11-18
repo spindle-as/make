@@ -11,10 +11,14 @@
  * last release when that section is empty), commits, tags vX.Y.Z and pushes. GitHub Actions
  * then builds the app, publishes the release with checksums, and installed apps offer the update.
  *
- *   node scripts/release.mjs notes v1.2.3  → print that version's release notes (used by CI)
+ *   npm run release -- --local   → same, but build and publish from this Mac instead of GitHub Actions
+ *   node scripts/release.mjs publish v1.2.3 → build + publish an already-pushed tag from this Mac
+ *                                            (fallback when Actions has no macOS runner free)
+ *   node scripts/release.mjs notes v1.2.3   → print that version's release notes (used by CI)
  */
 import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 
 const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', stdio: opts.inherit ? 'inherit' : 'pipe', ...opts })?.toString().trim()
 const fail = (msg) => {
@@ -24,11 +28,43 @@ const fail = (msg) => {
 
 const args = process.argv.slice(2)
 const dry = args.includes('--dry-run')
+const local = args.includes('--local')
 const positional = args.filter((a) => !a.startsWith('--'))
 
 if (positional[0] === 'notes') {
   process.stdout.write(notesFor(positional[1]))
   process.exit(0)
+}
+if (positional[0] === 'publish') {
+  publishLocally(positional[1])
+  process.exit(0)
+}
+
+/** Build the tagged version here and create the GitHub release (same assets as the workflow). */
+function publishLocally(tagArg) {
+  const tag = tagArg?.startsWith('v') ? tagArg : `v${tagArg ?? ''}`
+  const version = tag.slice(1)
+  if (!sh('git', ['tag', '--list', tag])) fail(`No tag ${tag}. Cut it with npm run release first.`)
+  const head = sh('git', ['rev-parse', 'HEAD'])
+  const at = sh('git', ['rev-list', '-n', '1', tag])
+  if (head !== at) fail(`Check out ${tag} first (git checkout ${tag}) so the build matches the tag.`)
+  if (JSON.parse(readFileSync('package.json', 'utf8')).version !== version) fail(`package.json isn't ${version}.`)
+  try {
+    sh('gh', ['release', 'view', tag])
+    fail(`Release ${tag} already exists on GitHub.`)
+  } catch (e) {
+    if (e?.status === undefined) throw e
+  }
+  console.log(`Building ${tag} on this Mac…`)
+  sh('rm', ['-rf', 'dist'])
+  sh('npm', ['run', '--silent', 'dist'], { inherit: true })
+  const files = readdirSync('dist').filter((f) => (f.endsWith('.dmg') || f.endsWith('.zip')) && f.includes(version))
+  if (!files.length) fail('The build produced no DMG or zip.')
+  const sums = files.map((f) => `${createHash('sha256').update(readFileSync(`dist/${f}`)).digest('hex')}  ${f}`).join('\n') + '\n'
+  writeFileSync('dist/SHA256SUMS.txt', sums)
+  writeFileSync('dist/notes.md', notesFor(tag))
+  sh('gh', ['release', 'create', tag, ...files.map((f) => `dist/${f}`), 'dist/SHA256SUMS.txt', '--title', `Spindle Make ${version}`, '--notes-file', 'dist/notes.md', '--verify-tag'], { inherit: true })
+  console.log(`\n✓ Published ${tag}.`)
 }
 
 function changelog() {
@@ -136,6 +172,11 @@ sh('git', ['add', 'package.json', 'package-lock.json', 'CHANGELOG.md'])
 sh('git', ['commit', '-m', `Release ${tag}`])
 sh('git', ['tag', '-a', tag, '-m', `Spindle Make ${version}\n\n${section}`])
 sh('git', ['push', '--follow-tags', 'origin', 'main'], { inherit: true })
+
+if (local) {
+  publishLocally(tag)
+  process.exit(0)
+}
 
 const repo = pkg.repository?.url?.replace(/^https:\/\/github.com\//, '').replace(/\.git$/, '')
 console.log(`\n✓ Pushed ${tag}. GitHub Actions is building it now:\n  https://github.com/${repo}/actions\n  The release appears at https://github.com/${repo}/releases/tag/${tag} in a few minutes.\n`)

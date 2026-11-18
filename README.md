@@ -103,7 +103,10 @@ One command, from a clean, up-to-date `main`:
 npm run release              # next patch: 0.1.0 → 0.1.1
 npm run release -- minor     # or major, or an exact version: npm run release -- 1.0.0
 npm run release -- --dry-run # preview the version and notes, change nothing
+npm run release -- --local   # build and publish from this Mac instead of GitHub Actions
 ```
+
+If GitHub has no macOS runner free (it happens), publish an already-pushed tag from your Mac with `git checkout v0.1.1 && node scripts/release.mjs publish v0.1.1` — the workflow sees the release exists and skips.
 
 It runs typecheck and tests, bumps the version, moves **Unreleased** in [CHANGELOG.md](CHANGELOG.md) under the new version (or lists the commits since the last release if that section is empty), commits, tags `vX.Y.Z` and pushes. The [Release workflow](.github/workflows/release.yml) then builds the app on a macOS runner and publishes a GitHub release with the DMG, the zip and `SHA256SUMS.txt`. Installed apps pick it up within six hours, or right away via *Check for Updates…*.
 
