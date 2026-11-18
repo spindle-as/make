@@ -70,7 +70,7 @@ function bump(current, kind) {
 }
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
-const kind = positional[0] ?? 'patch'
+const kind = (positional[0] ?? 'patch').replace(/^v(?=\d)/, '')
 
 // --- preflight ---
 if (sh('git', ['status', '--porcelain'])) fail('You have uncommitted changes. Commit or stash them first.')
