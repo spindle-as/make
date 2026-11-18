@@ -4,6 +4,8 @@ All notable changes to Spindle Make. `npm run release` moves the **Unreleased** 
 
 ## Unreleased
 
+## v0.1.0 — 2026-11-18
+
 First public release of Spindle / Make — from idea to pull request in one app.
 
 - **Changes as conversations**: every change gets its own git worktree, branch, database and HTTPS site, so several can run in parallel. Plain chats work too.
@@ -16,3 +18,4 @@ First public release of Spindle / Make — from idea to pull request in one app.
 - **Permissions enforced in the app**: contributors end at “Submit for review”; the AI has the same limits.
 - **Development environment in the repo** (`.spindle/`): runtime versions, setup steps, processes, notes for the AI; commands need approval before they run.
 - **Self-updating**: new versions download in the background and install with one click.
+
