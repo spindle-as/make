@@ -66,6 +66,8 @@ export class ClaudeStreamParser {
   private streams = new Map<string, Map<number, StreamBlock>>()
   private currentMsg = ''
   private seq = 0
+  /** whether this turn produced any top-level reply text (local slash commands don't) */
+  private repliedThisTurn = false
 
   /** Pick a stable id for a finished block so it replaces the streamed version in place. */
   private finalId(msgId: string, kind: 'text' | 'thinking', text: string): string {
@@ -138,6 +140,7 @@ export class ClaudeStreamParser {
       const msgId = j.message.id || j.uuid || String(now)
       j.message.content.forEach((b: Record<string, any>) => {
         if (b.type === 'text' && b.text?.trim()) {
+          if (!parentId) this.repliedThisTurn = true
           out.items.push({ id: this.finalId(msgId, 'text', b.text), role: 'assistant', text: b.text, ts: now, ...(parentId ? { parentId } : {}) })
         } else if (b.type === 'thinking' && b.thinking?.trim()) {
           out.items.push({ id: this.finalId(msgId, 'thinking', b.thinking), role: 'thinking', text: b.thinking, ts: now, ...(parentId ? { parentId } : {}) })
@@ -185,6 +188,12 @@ export class ClaudeStreamParser {
         }
       }
       const isError = j.is_error || (j.subtype && j.subtype !== 'success')
+      // Local slash commands (/context, /mcp, /usage, /recap …) answer only here, without an
+      // assistant message — show that answer as the reply instead of dropping it.
+      if (!isError && !this.repliedThisTurn && typeof j.result === 'string' && j.result.trim()) {
+        out.items.push({ id: `result-${j.session_id ?? ''}-${this.seq++}`, role: 'assistant', text: j.result, ts: now })
+      }
+      this.repliedThisTurn = false
       out.done = {
         costUsd: typeof j.total_cost_usd === 'number' ? j.total_cost_usd : undefined,
         error: isError ? String(j.result || j.subtype || 'Agent error') : undefined

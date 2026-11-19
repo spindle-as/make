@@ -61,7 +61,7 @@ export function ChecksSection({ feature }: { feature: Feature }) {
   const done = results.length
 
   return (
-    <section className="rounded-2xl border border-line bg-raised/40 p-4">
+    <section className="rounded-2xl bg-raised p-4">
       <div className="flex items-center gap-3">
         <span className="flex size-7 items-center justify-center rounded-full bg-hover text-sm font-semibold">1</span>
         <div className="min-w-0 flex-1">
@@ -241,7 +241,7 @@ export function ReviewPanel({ feature, project }: { feature: Feature; project: P
   // Checks run locally, so they work without GitHub; only submitting needs a repository.
   if (!project.githubRepo) {
     return (
-      <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
+      <div className="flex h-full flex-col gap-4 overflow-y-auto px-6 pt-2 pb-6">
         <ChecksSection feature={feature} />
         <div className="rounded-2xl border border-dashed border-line-strong p-4 text-sm text-muted">
           To submit this for review, connect the project to GitHub: add the repository in project settings.
@@ -258,7 +258,7 @@ export function ReviewPanel({ feature, project }: { feature: Feature; project: P
   }
 
   return (
-    <div className="h-full overflow-y-auto p-4">
+    <div className="h-full overflow-y-auto px-6 pt-2 pb-6">
       <div className="mb-4 flex items-center gap-2 rounded-xl bg-raised/50 px-3 py-2.5 text-sm">
         <Lock className="size-4 text-muted" />
         <span className="text-muted">
@@ -285,7 +285,7 @@ export function ReviewPanel({ feature, project }: { feature: Feature; project: P
       <div className="flex flex-col gap-3">
         <ChecksSection feature={feature} />
 
-        <section className="rounded-2xl border border-line bg-raised/40 p-4">
+        <section className="rounded-2xl bg-raised p-4">
           <div className="flex items-center gap-3">
             <span className="flex size-7 items-center justify-center rounded-full bg-hover text-sm font-semibold">2</span>
             <div className="min-w-0 flex-1">
@@ -367,7 +367,7 @@ export function ReviewPanel({ feature, project }: { feature: Feature; project: P
         </section>
 
         {pr?.state === 'OPEN' && access?.canMerge && (
-          <section className="rounded-2xl border border-line bg-raised/40 p-4">
+          <section className="rounded-2xl bg-raised p-4">
             <div className="flex items-center gap-3">
               <span className="flex size-7 items-center justify-center rounded-full bg-hover text-sm font-semibold">3</span>
               <div className="min-w-0 flex-1">

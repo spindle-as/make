@@ -4,6 +4,12 @@ All notable changes to Spindle Make. `npm run release` moves the **Unreleased** 
 
 ## Unreleased
 
+- **Simpler, calmer interface** (following Google's Material 3 guidelines): one clear main action per area, quiet surfaces instead of outlines, pill-shaped buttons with bigger click targets, stronger text contrast and a clear keyboard focus ring everywhere.
+- **A much simpler message box**: just your message, one settings button (model, thinking effort, what the agent may do on its own, goal mode, spend limit — all in one panel) and Send. Goal mode and unusual permissions show as a small chip so you always see them.
+- **Commands that work**: the `/` menu lists only commands that work in Spindle, explains each in plain words, groups them (commands, skills, plugins), says when nothing matches, and runs commands like `/context`, `/compact` or `/code-review` as soon as you pick them. Fixed: answers from commands like `/context`, `/mcp` and `/usage` never showed up.
+- **No more side tabs**: the side panel shows the preview; a single menu switches to changes, emails, data, logs and the rest, each with a one-line explanation. Review & ship is now one focused dialog, opened from the next-step button or the stage chip in the header.
+- **Tidier header and preview**: one header row (title, stage, open in browser, side panel, and a ⋮ menu for the rest) and a one-row preview toolbar with **Comment** and **Log in as** up front.
+
 ## v0.1.3 — 2026-11-19
 
 - **Fixed: SQLite databases that "didn't exist"** although Spindle said it created them. Changes sharing the main database now point at the main checkout's file (they pointed at a missing file inside the worktree), and every change's `.env` gets the database's full path, so artisan, the preview server, Herd and the AI all open the same file. Re-run setup on an existing change to fix it.

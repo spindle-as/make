@@ -1,36 +1,35 @@
 import clsx from 'clsx'
-import { Database, FileDiff, Globe, Mail, Rocket, ScrollText, SquareTerminal, Wrench } from 'lucide-react'
+import { ChevronDown, Database, FileDiff, Globe, Mail, ScrollText, SquareTerminal, Wrench, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Feature, Project } from '@shared/types'
 import { ChangesPanel } from '../panels/ChangesPanel'
 import { DataPanel } from '../panels/DataPanel'
 import { MailPanel } from '../panels/MailPanel'
-import { ReviewPanel } from '../panels/ReviewPanel'
 import { useIsCreator, useWords, type Words } from '../lib/words'
 import { LogsPanel } from '../panels/LogsPanel'
 import { PreviewPanel } from '../panels/PreviewPanel'
 import { SetupPanel } from '../panels/SetupPanel'
-import { ShipPanel } from '../panels/ShipPanel'
 import { TerminalPanel } from '../panels/TerminalPanel'
 import { useStore, type RightTab } from '../store'
+import { IconButton, Menu } from './ui'
 
-type TabDef = { key: RightTab; label: (w: Words) => string; icon: ReactNode }
-const TABS: TabDef[] = [
-  { key: 'preview', label: () => 'Preview', icon: <Globe className="size-4" /> },
-  { key: 'changes', label: (w) => w.changesTab, icon: <FileDiff className="size-4" /> },
-  { key: 'ship', label: (w) => w.shipTab, icon: <Rocket className="size-4" /> },
-  { key: 'email', label: () => 'Email', icon: <Mail className="size-4" /> },
-  { key: 'data', label: () => 'Data', icon: <Database className="size-4" /> },
-  { key: 'logs', label: (w) => w.logsTab, icon: <ScrollText className="size-4" /> },
-  { key: 'terminal', label: (w) => w.processesTab, icon: <SquareTerminal className="size-4" /> },
-  { key: 'setup', label: (w) => w.setupTab, icon: <Wrench className="size-4" /> }
+type ViewDef = { key: RightTab; label: (w: Words) => string; description: string; icon: ReactNode }
+/** What the side panel can show. Review & ship is not here: it's a dialog of its own. */
+const VIEWS: ViewDef[] = [
+  { key: 'preview', label: () => 'Preview', description: 'Your copy of the app, to try the change', icon: <Globe className="size-4" /> },
+  { key: 'changes', label: (w) => w.changesTab, description: 'The files the AI edited', icon: <FileDiff className="size-4" /> },
+  { key: 'email', label: () => 'Emails', description: 'Emails your copy sent — they never reach anyone', icon: <Mail className="size-4" /> },
+  { key: 'data', label: () => 'Data', description: 'Browse your copy’s database', icon: <Database className="size-4" /> },
+  { key: 'logs', label: (w) => w.logsTab, description: 'Errors and log output', icon: <ScrollText className="size-4" /> },
+  { key: 'terminal', label: (w) => w.processesTab, description: 'Dev server, queue and other processes', icon: <SquareTerminal className="size-4" /> },
+  { key: 'setup', label: (w) => w.setupTab, description: 'How this copy was prepared', icon: <Wrench className="size-4" /> }
 ]
 
-function tabsFor(feature: Feature, creator: boolean): RightTab[] {
+function viewsFor(feature: Feature, creator: boolean): RightTab[] {
   if (feature.kind === 'chat') return creator ? ['email', 'data'] : ['email', 'data', 'terminal', 'logs']
-  if (feature.cleanedUp) return ['ship', 'logs']
-  if (creator) return ['preview', 'changes', 'ship', 'email', 'data']
-  const all: RightTab[] = ['preview', 'changes', 'ship', 'email', 'data', 'logs', 'terminal', 'setup']
+  if (feature.cleanedUp) return ['logs']
+  if (creator) return ['preview', 'changes', 'email', 'data']
+  const all: RightTab[] = ['preview', 'changes', 'email', 'data', 'logs', 'terminal', 'setup']
   return feature.inPlace ? all.filter((t) => t !== 'setup') : all
 }
 
@@ -41,10 +40,11 @@ const KEEP_ALIVE = 4
 export function RightPanel({ feature, project }: { feature: Feature; project: Project }) {
   const creator = useIsCreator()
   const w = useWords()
-  const available = tabsFor(feature, creator)
+  const available = viewsFor(feature, creator)
   const stored = useStore((s) => s.rightTab)
   const tab = available.includes(stored) ? stored : available[0]
   const setTab = useStore((s) => s.setRightTab)
+  const current = VIEWS.find((v) => v.key === tab)
   const features = useStore((s) => s.features)
   const projects = useStore((s) => s.projects)
   // Threads whose preview has been opened (a few are kept alive). The list keeps a stable order:
@@ -118,25 +118,47 @@ export function RightPanel({ feature, project }: { feature: Feature; project: Pr
           document.body.style.cursor = 'col-resize'
         }}
       />
-      <div className="no-scrollbar drag flex h-14 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-line px-2">
-        {TABS.filter((t) => available.includes(t.key)).map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            aria-current={tab === t.key ? 'page' : undefined}
-            title={`${t.label(w)}  ⌘⌥${TABS.indexOf(t) + 1}`}
-            className={clsx(
-              'press no-drag flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-sm',
-              tab === t.key ? 'bg-active text-fg' : 'text-muted hover:bg-hover hover:text-fg'
-            )}
-          >
-            {t.icon}
-            {t.label(w)}
-            {t.key === 'setup' && feature.setupStatus === 'running' && <span className="pulse size-1.5 rounded-full bg-warn" />}
-            {t.key === 'setup' && feature.setupStatus === 'failed' && <span className="size-1.5 rounded-full bg-bad" />}
+      <div className="drag flex h-14 shrink-0 items-center gap-2 border-b border-line px-3">
+        <Menu
+          label="Show in the side panel"
+          width={320}
+          items={VIEWS.filter((v) => available.includes(v.key)).map((v) => ({
+            key: v.key,
+            label: v.label(w),
+            description: v.description,
+            icon: v.icon,
+            checked: tab === v.key,
+            trailing:
+              v.key === 'setup' && feature.setupStatus === 'running' ? (
+                <span className="pulse size-2 rounded-full bg-warn" aria-label="running" />
+              ) : v.key === 'setup' && feature.setupStatus === 'failed' ? (
+                <span className="size-2 rounded-full bg-bad" aria-label="failed" />
+              ) : undefined,
+            onSelect: () => setTab(v.key)
+          }))}
+          renderTrigger={(p) => (
+            <button
+              {...p.props}
+              type="button"
+              onClick={p.toggle}
+              title="Choose what the side panel shows"
+              className={clsx('press no-drag flex h-10 items-center gap-2 rounded-full pr-3 pl-4 text-sm font-medium', p.open ? 'bg-active' : 'hover:bg-hover')}
+            >
+              {current?.icon}
+              {current?.label(w)}
+              <ChevronDown className={clsx('size-4 text-muted transition-transform', p.open && 'rotate-180')} />
+            </button>
+          )}
+        />
+        {feature.setupStatus === 'failed' && tab !== 'setup' && available.includes('setup') && (
+          <button type="button" onClick={() => setTab('setup')} className="no-drag rounded-full bg-bad/15 px-3 py-1 text-xs font-medium text-bad hover:bg-bad/25">
+            Setup failed
           </button>
-        ))}
+        )}
+        <div className="flex-1" />
+        <IconButton title="Close side panel" shortcut="toggle-panel" onClick={() => useStore.getState().toggleRight()}>
+          <X className="size-5" />
+        </IconButton>
       </div>
       <div className="relative min-h-0 flex-1">
         {/* Previews stay alive (hidden) when you switch tabs or threads: logins, OTP steps and forms keep their state. */}
@@ -154,7 +176,6 @@ export function RightPanel({ feature, project }: { feature: Feature; project: Pr
         {tab !== 'preview' && (
           <div className="absolute inset-0">
         {tab === 'changes' && <ChangesPanel feature={feature} />}
-        {tab === 'ship' && (creator ? <ReviewPanel feature={feature} project={project} /> : <ShipPanel feature={feature} project={project} />)}
         {tab === 'email' && <MailPanel feature={feature} />}
         {tab === 'data' && <DataPanel feature={feature} />}
         {tab === 'logs' && <LogsPanel feature={feature} project={project} />}

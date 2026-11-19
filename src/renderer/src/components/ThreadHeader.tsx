@@ -1,65 +1,47 @@
 import clsx from 'clsx'
-import { Archive, Check, Code2, ExternalLink, FolderOpen, GitBranch, MessageSquare, PanelRight, Rocket, SquareTerminal } from 'lucide-react'
+import { Archive, Check, Code2, ExternalLink, FolderOpen, MoreVertical, PanelRight, Pencil, Rocket, SquareTerminal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Feature, FeatureStage, Project } from '@shared/types'
 import { runAction } from '../lib/actions'
-import { act, useStore, type RightTab } from '../store'
+import { act, useStore } from '../store'
 import { DeployPill } from './DeployStatus'
 import { useIsCreator, useWords } from '../lib/words'
-import { Button, IconButton } from './ui'
+import { Button, IconButton, Menu, type MenuEntry } from './ui'
 
-const PIPELINE: { key: FeatureStage; label: string; tab: RightTab }[] = [
-  { key: 'coding', label: 'Code', tab: 'changes' },
-  { key: 'testing', label: 'Test', tab: 'preview' },
-  { key: 'pr', label: 'PR & CI', tab: 'ship' },
-  { key: 'merged', label: 'Merge', tab: 'ship' },
-  { key: 'deployed', label: 'Deploy', tab: 'ship' }
-]
-const ORDER: FeatureStage[] = ['setup', 'coding', 'testing', 'pr', 'merged', 'deployed']
+const STEPS: FeatureStage[] = ['coding', 'testing', 'pr', 'merged', 'deployed']
 
-function Pipeline({ feature }: { feature: Feature }) {
-  const setTab = useStore((s) => s.setRightTab)
+/**
+ * Where the change stands, as one chip ("Step 2 of 5 · Preview"). It opens the review & ship
+ * dialog — the next step lives there and under the conversation, not in a row of tabs.
+ */
+function StageChip({ feature }: { feature: Feature }) {
   const w = useWords()
   const running = useStore((s) => s.statuses[feature.id]?.running)
-  const cur = ORDER.indexOf(feature.stage)
+  const stage = feature.stage === 'setup' ? 'coding' : feature.stage
+  const i = Math.max(0, STEPS.indexOf(stage))
+  const label = w.stages[stage as keyof typeof w.stages] ?? stage
+  const done = stage === 'deployed'
   return (
-    <ol className="no-drag flex items-center gap-1" aria-label="Pipeline">
-      {PIPELINE.map((step, i) => {
-        const idx = ORDER.indexOf(step.key)
-        const done = cur > idx
-        const active = cur === idx || (step.key === 'coding' && feature.stage === 'setup')
-        return (
-          <li key={step.key} className="flex items-center gap-1">
-            {i > 0 && <div className={clsx('h-px w-4', done || active ? 'bg-fg/40' : 'bg-line-strong')} />}
-            <button
-              type="button"
-              onClick={() => setTab(step.tab)}
-              aria-current={active ? 'step' : undefined}
-              className={clsx(
-                'press flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium',
-                done && 'border-line text-muted hover:text-fg',
-                active && 'border-fg/30 bg-active text-fg shadow-xs',
-                !done && !active && 'border-line text-faint hover:text-muted'
-              )}
-            >
-              {done ? (
-                <Check className="size-3.5 text-ok" />
-              ) : active && running && step.key === 'coding' ? (
-                <span className="pulse size-2 rounded-full bg-info" />
-              ) : (
-                <span className="tabular-nums">{i + 1}</span>
-              )}
-              {w.stages[step.key as keyof typeof w.stages] ?? step.label}
-            </button>
-          </li>
-        )
-      })}
-    </ol>
+    <button
+      type="button"
+      onClick={() => useStore.getState().openModal({ kind: 'ship', featureId: feature.id })}
+      title={`${STEPS.map((s) => w.stages[s as keyof typeof w.stages]).join(' → ')} — open review & ship`}
+      className="press no-drag flex h-8 shrink-0 items-center gap-2 rounded-lg border border-line-strong px-3 text-sm hover:bg-hover"
+    >
+      {done ? <Check className="size-4 text-ok" /> : running && i === 0 ? <span className="pulse size-2 rounded-full bg-info" /> : <span className="flex gap-0.5" aria-hidden>{STEPS.map((_, j) => <span key={j} className={clsx('h-1.5 w-1.5 rounded-full', j <= i ? 'bg-fg' : 'bg-line-strong')} />)}</span>}
+      <span className="font-medium">{label}</span>
+      <span className="sr-only">
+        step {i + 1} of {STEPS.length}
+      </span>
+    </button>
   )
 }
 
-function Title({ feature }: { feature: Feature }) {
+function Title({ feature, editSignal }: { feature: Feature; editSignal: number }) {
   const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    if (editSignal) setEditing(true)
+  }, [editSignal])
   const [value, setValue] = useState(feature.title)
   const ref = useRef<HTMLInputElement>(null)
   useEffect(() => setValue(feature.title), [feature.title])
@@ -103,77 +85,65 @@ export function ThreadHeader({ feature, project }: { feature: Feature; project: 
   const isChat = feature.kind === 'chat'
   const hasWorkspace = !feature.cleanedUp
   const creator = useIsCreator()
+  const w = useWords()
+  const [renaming, setRenaming] = useState(0)
+  // Material 3 top app bar: a few trailing actions, everything else in the overflow menu.
+  const more: (MenuEntry | 'divider')[] = [
+    { key: 'rename', label: 'Rename', icon: <Pencil className="size-4" />, onSelect: () => setRenaming((n) => n + 1) },
+    ...(project && hasWorkspace && !creator
+      ? [
+          { key: 'editor', label: 'Open in editor', icon: <Code2 className="size-4" />, onSelect: () => void runAction('open-editor') },
+          { key: 'terminal', label: 'Open in Terminal', icon: <SquareTerminal className="size-4" />, onSelect: () => void runAction('open-terminal') },
+          { key: 'finder', label: 'Show in Finder', icon: <FolderOpen className="size-4" />, onSelect: () => void act(() => window.api.openInFinder(feature.worktreePath)) }
+        ]
+      : []),
+    'divider',
+    { key: 'archive', label: 'Archive…', icon: <Archive className="size-4" />, onSelect: () => void runAction('archive') }
+  ]
   return (
-    <>
-      <header className={clsx('drag flex h-14 shrink-0 items-center gap-3 border-b border-line px-4', !sidebarOpen && 'pl-8')}>
-        <div className="min-w-0 flex-1">
-          <Title feature={feature} />
-          <div className="flex min-w-0 items-center gap-1.5 text-xs leading-tight whitespace-nowrap text-faint">
-            {isChat ? <MessageSquare className="size-3.5 shrink-0" /> : <GitBranch className="size-3.5 shrink-0" />}
-            <span className="shrink-0">{project?.name ?? 'General chat'}</span>
-            {!isChat && !creator && (
-              <>
-                <span>·</span>
-                <span className="selectable no-drag truncate font-mono">{feature.branch}</span>
-              </>
-            )}
-            {feature.localUrl && (
-              <>
-                <span>·</span>
-                <button type="button" className="no-drag truncate text-info hover:underline" onClick={() => void window.api.openExternal(feature.localUrl!)}>
-                  {feature.localUrl.replace(/^https?:\/\//, '')}
-                </button>
-              </>
-            )}
-            {feature.database && feature.database.driver !== 'sqlite' && !feature.cleanedUp && (
-              <>
-                <span>·</span>
-                <span className="truncate">db {feature.database.name}</span>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="no-drag flex shrink-0 items-center gap-0.5">
-          {isChat && project && (
-            <Button size="sm" variant="secondary" icon={<Rocket className="size-4" />} onClick={() => void runAction('promote')} className="mr-1" shortcut="promote">
-              Continue as feature
-            </Button>
-          )}
-          {feature.localUrl && (
-            <IconButton title="Open local site" shortcut="open-site" onClick={() => void runAction('open-site')}>
-              <ExternalLink className="size-4" />
-            </IconButton>
-          )}
-          {project && hasWorkspace && !creator && (
+    <header className={clsx('drag flex h-16 shrink-0 items-center gap-3 border-b border-line px-4', !sidebarOpen && 'pl-8')}>
+      <div className="min-w-0 flex-1">
+        <Title feature={feature} editSignal={renaming} />
+        <div className="flex min-w-0 items-center gap-1.5 text-xs leading-tight whitespace-nowrap text-muted">
+          <span className="shrink-0">{project?.name ?? 'General chat'}</span>
+          {!isChat && !creator && (
             <>
-              <IconButton title="Open in editor" shortcut="open-editor" onClick={() => void runAction('open-editor')}>
-                <Code2 className="size-4" />
-              </IconButton>
-              <IconButton title="Open in Terminal" shortcut="open-terminal" onClick={() => void runAction('open-terminal')}>
-                <SquareTerminal className="size-4" />
-              </IconButton>
-              <IconButton title="Reveal in Finder" onClick={() => void act(() => window.api.openInFinder(feature.worktreePath))}>
-                <FolderOpen className="size-4" />
-              </IconButton>
+              <span aria-hidden>·</span>
+              <span className="selectable no-drag truncate font-mono">{feature.branch}</span>
             </>
           )}
-          <IconButton title="Archive" shortcut="archive" onClick={() => void runAction('archive')}>
-            <Archive className="size-4" />
+        </div>
+      </div>
+      <div className="no-drag flex shrink-0 items-center gap-1">
+        {project && <DeployPill project={project} feature={feature} />}
+        {!isChat && !feature.cleanedUp && <StageChip feature={feature} />}
+        {isChat && project && (
+          <Button size="sm" variant="secondary" icon={<Rocket className="size-4" />} onClick={() => void runAction('promote')} shortcut="promote">
+            {creator ? `Turn into a ${w.feature.toLowerCase()}` : 'Continue as feature'}
+          </Button>
+        )}
+        {feature.localUrl && (
+          <IconButton title="Open in your browser" shortcut="open-site" onClick={() => void runAction('open-site')}>
+            <ExternalLink className="size-5" />
           </IconButton>
-          {project && (
-            <IconButton title="Toggle side panel" shortcut="toggle-panel" active={rightOpen} onClick={() => void runAction('toggle-panel')}>
-              <PanelRight className="size-4" />
+        )}
+        {project && (
+          <IconButton title={rightOpen ? 'Hide side panel' : 'Show side panel'} shortcut="toggle-panel" active={rightOpen} aria-pressed={rightOpen} onClick={() => void runAction('toggle-panel')}>
+            <PanelRight className="size-5" />
+          </IconButton>
+        )}
+        <Menu
+          label="More actions"
+          align="right"
+          width={240}
+          items={more}
+          renderTrigger={(p) => (
+            <IconButton {...p.props} title="More actions" onClick={p.toggle} active={p.open}>
+              <MoreVertical className="size-5" />
             </IconButton>
           )}
-        </div>
-      </header>
-      {!isChat && (
-        <div className="flex h-12 shrink-0 items-center gap-4 border-b border-line px-4">
-          <Pipeline feature={feature} />
-          <div className="min-w-0 flex-1" />
-          {project && <DeployPill project={project} feature={feature} />}
-        </div>
-      )}
-    </>
+        />
+      </div>
+    </header>
   )
 }

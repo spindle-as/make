@@ -18,6 +18,8 @@ export type Modal =
   | { kind: 'palette' }
   | { kind: 'open-project' }
   | { kind: 'update' }
+  /** the review & ship flow for a change: checks, submit, approve, go live */
+  | { kind: 'ship'; featureId: string }
   | null
 
 /** Settings for the next thread, chosen on the "new" screen before anything exists. */
@@ -128,7 +130,7 @@ export const useStore = create<State>((set, get) => ({
   view: 'new',
   draft: { ...defaultDraft, ...read<Partial<Draft>>(LS.draft, {}) },
   selectedFeatureId: null,
-  rightTab: 'changes',
+  rightTab: 'preview',
   rightOpen: read(LS.right, true),
   sidebarOpen: read(LS.sidebar, true),
   modal: null,
@@ -286,6 +288,12 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setRightTab(t) {
+    // Review & ship isn't a side view any more: it opens as a focused dialog.
+    if (t === 'ship') {
+      const id = get().selectedFeatureId
+      if (id) set({ modal: { kind: 'ship', featureId: id } })
+      return
+    }
     set({ rightTab: t, rightOpen: true })
     write(LS.right, true)
   },

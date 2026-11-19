@@ -3,7 +3,7 @@ import { ArrowRight, Factory, FolderPlus, GitBranch, MessageSquare, Sparkles, Tr
 import { useMemo } from 'react'
 import type { ThreadKind } from '@shared/types'
 import { runAction } from '../lib/actions'
-import { useWords } from '../lib/words'
+import { useIsCreator, useWords } from '../lib/words'
 import { ProjectSetupCard } from './OpenProject'
 import { act, orderedThreads, useStore } from '../store'
 import { Composer, type AgentConfig } from './Composer'
@@ -31,6 +31,7 @@ export function NewThread() {
   const project = projects.find((p) => p.id === draft.projectId) ?? null
   const isFeature = draft.kind === 'feature'
   const w = useWords()
+  const creator = useIsCreator()
 
   const missing = useMemo(() => (integrations ?? []).filter((i) => !i.optional && !i.ready), [integrations])
   const noAgent = integrations && !integrations.some((i) => (i.id === 'claude' || i.id === 'codex') && i.ready)
@@ -111,11 +112,10 @@ export function NewThread() {
             cfg={cfg}
             onChange={(p) => setDraft(p)}
             onSubmit={submit}
-            placeholder={isFeature ? 'Describe the feature…' : 'Ask anything…'}
+            placeholder={isFeature ? `Describe the ${w.feature.toLowerCase()} — type / for commands` : 'Ask anything…'}
             header={
               <>
                 <Segmented<ThreadKind>
-                  size="sm"
                   value={draft.kind}
                   onChange={(kind) => setDraft({ kind })}
                   options={[
@@ -130,7 +130,7 @@ export function NewThread() {
                     if (e.target.value === '__add') return void runAction('add-project')
                     setDraft({ projectId: e.target.value || null })
                   }}
-                  className="h-8 max-w-[220px] border-transparent bg-transparent text-sm hover:bg-hover"
+                  className="max-w-[240px] rounded-full border-line-strong bg-transparent px-4 text-sm hover:bg-hover"
                 >
                   {!isFeature && <option value="">No project</option>}
                   {isFeature && !project && <option value="">Choose a project…</option>}
@@ -141,15 +141,15 @@ export function NewThread() {
                   ))}
                   <option value="__add">+ Open project…</option>
                 </Select>
-                {isFeature && project && (
-                  <span className="ml-auto flex items-center gap-1.5 font-mono text-xs text-faint">
+                {isFeature && project && !creator && (
+                  <span className="ml-auto flex items-center gap-1.5 font-mono text-xs text-muted">
                     <GitBranch className="size-3.5" /> from
                     <input
                       aria-label="Base branch"
                       value={draft.baseBranch}
                       onChange={(e) => setDraft({ baseBranch: e.target.value })}
                       placeholder={project.defaultBranch}
-                      className="w-24 rounded-md bg-transparent px-1.5 py-0.5 text-muted outline-none placeholder:text-faint hover:bg-hover focus:bg-hover"
+                      className="h-8 w-28 rounded-lg bg-transparent px-2 text-muted outline-none placeholder:text-muted hover:bg-hover focus:bg-hover"
                     />
                   </span>
                 )}
@@ -193,7 +193,7 @@ export function NewThread() {
           {recent.length > 0 && (
             <div className="mt-4">
               <div className="mb-2 flex items-center justify-between px-1">
-                <span className="text-xs font-semibold tracking-wider text-faint uppercase">Recent</span>
+                <h2 className="text-sm font-medium text-muted">Recent</h2>
                 <span className="flex items-center gap-1.5 text-xs text-faint">
                   Jump with <Kbd keys={['⌘', '1–9']} /> or <Kbd keys={shortcutFor('palette')} />
                 </span>

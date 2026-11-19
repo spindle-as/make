@@ -29,7 +29,7 @@ function useProjectDeploys(projectId: string): DeployState[] {
   return Object.values(all).filter((d) => d.projectId === projectId)
 }
 
-/** Compact live status for the most relevant environment; clicking opens the Ship tab. */
+/** Compact live status for the most relevant environment; clicking opens review & ship. */
 export function DeployPill({ project, feature }: { project: Project; feature?: Feature }) {
   const deploys = useProjectDeploys(project.id)
   const setTab = useStore((s) => s.setRightTab)
@@ -47,12 +47,12 @@ export function DeployPill({ project, feature }: { project: Project; feature?: F
       type="button"
       onClick={() => setTab('ship')}
       className={clsx(
-        'no-drag flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 text-sm font-medium transition-colors',
-        running(d) && 'border-info/40 bg-info/10 text-info',
-        d.status === 'success' && 'border-ok/30 bg-ok/10 text-ok',
-        d.status === 'failed' && 'border-bad/40 bg-bad/10 text-bad'
+        'no-drag flex h-8 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors',
+        running(d) && 'bg-info/15 text-info',
+        d.status === 'success' && 'bg-ok/15 text-ok',
+        d.status === 'failed' && 'bg-bad/15 text-bad'
       )}
-      title="Open the Ship tab"
+      title="Open review & ship"
     >
       {running(d) ? <Loader2 className="size-4 animate-spin" /> : d.status === 'success' ? <Check className="size-4" /> : <X className="size-4" />}
       {running(d) ? (

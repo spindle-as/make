@@ -17,28 +17,29 @@ import type { AgentKind, HarnessCommand, HarnessInfo, HarnessView } from '@share
 /** Built-in Claude Code commands worth explaining in the menu. */
 const BUILT_IN: Record<string, string> = {
   goal: 'Give Claude a goal — it keeps working until it’s done',
-  compact: 'Summarise the conversation to free up context',
-  context: 'Show how much of the context window is used',
-  'code-review': 'Review the current changes for bugs',
-  'security-review': 'Review the pending changes for security issues',
-  simplify: 'Clean up the changed code (reuse, simplification, efficiency)',
+  'code-review': 'Look over the changes for bugs',
+  'security-review': 'Look over the changes for security problems',
+  simplify: 'Tidy up the changed code',
   verify: 'Check that the work actually works',
-  review: 'Review a pull request',
-  init: 'Write a CLAUDE.md that explains this codebase',
-  'list-agents': 'List the available subagents',
-  agents: 'Manage subagents',
-  mcp: 'Show MCP servers and their status',
-  model: 'Switch model for this session',
-  effort: 'Change reasoning effort for this session',
-  'output-style': 'Change the output style',
+  compact: 'Free up memory by summarising the conversation so far',
+  context: 'Show how much of Claude’s memory is used',
   recap: 'Summarise what happened so far',
-  debug: 'Help debug a problem',
-  batch: 'Run a task across many items',
-  usage: 'Show plan usage',
-  insights: 'Session insights'
+  init: 'Write a CLAUDE.md that explains this project',
+  review: 'Review a pull request',
+  debug: 'Help track down a problem',
+  batch: 'Do the same task across many items',
+  mcp: 'Show connected tools (MCP servers)',
+  usage: 'Show how much of your plan is used'
 }
-/** Commands that only make sense in Claude Code's own terminal UI. */
-const TERMINAL_ONLY = new Set(['clear', 'color', 'config', 'doctor', 'focus', 'reload-plugins', 'reload-skills', 'rename', 'heapdump', 'import', 'extra-usage', 'usage-credits', 'fast', 'autocompact', 'design-consent', 'design-revoke', 'team-onboarding', 'workflow-launch-exec'])
+/**
+ * Commands that don't belong in the menu: they only work in Claude Code's own terminal UI, the
+ * app already has a control for them (model, reasoning, output style), they're confusing outside
+ * a terminal (list-agents lists terminal sessions), or they're unexpectedly expensive (insights).
+ */
+const HIDDEN = new Set([
+  'clear', 'color', 'config', 'doctor', 'focus', 'reload-plugins', 'reload-skills', 'rename', 'heapdump', 'import', 'extra-usage', 'usage-credits', 'fast', 'autocompact', 'design-consent', 'design-revoke', 'team-onboarding', 'workflow-launch-exec',
+  'agents', 'model', 'effort', 'output-style', 'list-agents', 'insights', 'ultrareview', 'auto-mode-setup', 'cost', 'status', 'statusline', 'terminal-setup', 'vim', 'theme', 'login', 'logout', 'exit', 'resume', 'permissions', 'hooks', 'memory', 'ide', 'install-github-app', 'export', 'bug', 'feedback', 'release-notes', 'privacy-settings', 'upgrade', 'add-dir', 'plugin', 'plugins', 'skills', 'sandbox', 'keybindings', 'pr-comments', 'migrate-installer'
+])
 
 const read = (f: string) => {
   try {
@@ -92,7 +93,7 @@ export function harnessView(agent: AgentKind, root: string | null, info: Harness
   const names = info?.slashCommands.length ? info.slashCommands : [...Object.keys(BUILT_IN), ...known.keys()]
   const skillSet = new Set(info?.skills ?? [])
   const commands: HarnessCommand[] = names
-    .filter((n) => !TERMINAL_ONLY.has(n))
+    .filter((n) => !HIDDEN.has(n))
     .map((n) => known.get(n) ?? { name: n, description: BUILT_IN[n], source: BUILT_IN[n] ? 'built-in' : skillSet.has(n) ? 'skill' : n.includes(':') ? 'plugin' : 'built-in' })
   // Most useful first: the ones we explain, then project/user, then the rest alphabetically.
   const rank = (c: HarnessCommand) => (c.name === 'goal' ? 0 : BUILT_IN[c.name] ? 1 : c.source === 'project' ? 2 : c.source === 'user' ? 3 : 4)

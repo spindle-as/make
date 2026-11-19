@@ -120,3 +120,20 @@ describe('the agent’s plan as one checklist', () => {
     expect(planFrom([tool('t', 'TodoWrite', { items: [{ text: 'X', completed: true }] })]).todos).toEqual([{ content: 'X', status: 'completed' }])
   })
 })
+
+describe('local slash commands', () => {
+  it('shows the answer of a command that replies without an assistant message', async () => {
+    const { ClaudeStreamParser } = await import('../src/main/agents/claudeParser')
+    const p = new ClaudeStreamParser()
+    const out = p.feed(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, num_turns: 0, result: '## Context Usage\n28k / 200k', session_id: 's1' }))
+    expect(out.items).toHaveLength(1)
+    expect(out.items[0]).toMatchObject({ role: 'assistant', text: expect.stringContaining('Context Usage') })
+  })
+  it('does not repeat the reply of a normal turn', async () => {
+    const { ClaudeStreamParser } = await import('../src/main/agents/claudeParser')
+    const p = new ClaudeStreamParser()
+    p.feed(JSON.stringify({ type: 'assistant', message: { id: 'm1', content: [{ type: 'text', text: 'Done.' }] } }))
+    const out = p.feed(JSON.stringify({ type: 'result', subtype: 'success', result: 'Done.' }))
+    expect(out.items).toHaveLength(0)
+  })
+})

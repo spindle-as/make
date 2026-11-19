@@ -29,73 +29,122 @@ export interface MenuItem {
   key: string
   label: string
   description?: string
-  source: string
+  /** heading the item is listed under */
+  group: string
   /** text that replaces the typed token */
   insert: string
+  /** picking it sends right away (built-in commands that need nothing after them) */
+  runsAlone?: boolean
 }
+
+/** Built-in commands that do their job without anything typed after them. */
+const RUNS_ALONE = new Set(['compact', 'context', 'recap', 'mcp', 'usage', 'code-review', 'security-review', 'simplify', 'verify', 'init'])
+const GROUPS: Record<string, string> = { 'built-in': 'Commands', skill: 'Skills', project: 'This project', user: 'Yours', plugin: 'Plugins', 'codex prompt': 'Prompts' }
+const ORDER = ['Commands', 'This project', 'Yours', 'Skills', 'Plugins', 'Prompts']
 
 /**
  * Items for the "/" (commands, skills) or "@" (subagents) menu, matching the token being typed
- * at the start of the message ("/" only at the very start, like Claude Code).
+ * ("/" only at the very start, like Claude Code). Matches names and descriptions.
  */
-export function useMenuItems(text: string, harness: HarnessView | null): { items: MenuItem[]; token: string; kind: '/' | '@' | null } {
+export function useMenuItems(text: string, harness: HarnessView | null): { items: MenuItem[]; token: string; query: string; kind: '/' | '@' | null } {
   return useMemo(() => {
-    if (!harness) return { items: [], token: '', kind: null }
+    const none = { items: [], token: '', query: '', kind: null }
     const slash = text.match(/^\/([\w:.-]*)$/)
     if (slash) {
       const q = slash[1].toLowerCase()
-      const items = harness.commands
-        .filter((c) => c.name.toLowerCase().includes(q))
-        .sort((a, b) => Number(!b.name.toLowerCase().startsWith(q)) - Number(!a.name.toLowerCase().startsWith(q)))
-        .slice(0, 40)
-        .map((c: HarnessCommand) => ({ key: `/${c.name}`, label: `/${c.name}`, description: c.description, source: c.source, insert: `/${c.name} ` }))
-      return { items, token: slash[0], kind: '/' as const }
+      const score = (c: HarnessCommand) => (c.name.toLowerCase().startsWith(q) ? 0 : c.name.toLowerCase().includes(q) ? 1 : 2)
+      const items = (harness?.commands ?? [])
+        .filter((c) => !q || c.name.toLowerCase().includes(q) || (c.description ?? '').toLowerCase().includes(q))
+        .map((c: HarnessCommand) => ({
+          key: `/${c.name}`,
+          label: `/${c.name}`,
+          description: c.description,
+          group: GROUPS[c.source] ?? 'Commands',
+          insert: `/${c.name} `,
+          runsAlone: c.source === 'built-in' && RUNS_ALONE.has(c.name),
+          _s: score(c)
+        }))
+        .sort((a, b) => ORDER.indexOf(a.group) - ORDER.indexOf(b.group) || a._s - b._s)
+        .slice(0, 80)
+        .map(({ _s: _, ...it }) => it)
+      return { items, token: slash[0], query: slash[1], kind: '/' as const }
     }
     const at = text.match(/(^|\s)@([\w:.-]*)$/)
-    if (at && harness.agents.length) {
+    if (at && harness?.agents.length) {
       const q = at[2].toLowerCase()
       const items = harness.agents
-        .filter((a) => a.name.toLowerCase().includes(q))
-        .map((a) => ({ key: `@${a.name}`, label: `@${a.name}`, description: a.description ?? 'Subagent', source: a.source, insert: `Use the ${a.name} subagent to ` }))
-      return { items, token: `@${at[2]}`, kind: '@' as const }
+        .filter((a) => !q || a.name.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q))
+        .map((a) => ({ key: `@${a.name}`, label: `@${a.name}`, description: a.description ?? 'Subagent', group: 'Subagents', insert: `Use the ${a.name} subagent to ` }))
+      return { items, token: `@${at[2]}`, query: at[2], kind: '@' as const }
     }
-    return { items: [], token: '', kind: null }
+    return none
   }, [text, harness])
 }
 
-const SOURCE_ICON: Record<string, typeof Terminal> = { skill: Sparkles, plugin: Puzzle, 'codex prompt': Terminal }
-
-export function CommandMenu({ items, active, onPick, onHover, kind }: { items: MenuItem[]; active: number; onPick: (i: MenuItem) => void; onHover: (i: number) => void; kind: '/' | '@' }) {
-  if (!items.length) return null
+/**
+ * The "/" and "@" suggestions: a Material 3 menu tied to the message box (ARIA combobox — the box
+ * keeps focus, ↑/↓ move the highlighted option, ↵ or Tab picks, Esc closes).
+ */
+export function CommandMenu({
+  id,
+  items,
+  active,
+  onPick,
+  onHover,
+  kind,
+  query,
+  loading
+}: {
+  id: string
+  items: MenuItem[]
+  active: number
+  onPick: (i: MenuItem) => void
+  onHover: (i: number) => void
+  kind: '/' | '@'
+  query: string
+  loading: boolean
+}) {
+  const Icon = kind === '@' ? Bot : Terminal
   return (
-    <div className="rise-in absolute right-0 bottom-full left-0 z-30 mb-2 max-h-80 overflow-y-auto rounded-xl border border-line-strong bg-panel p-1 shadow-2xl" role="listbox" aria-label={kind === '/' ? 'Commands' : 'Subagents'}>
-      <div className="px-2.5 pt-1.5 pb-1 text-2xs font-semibold tracking-wider text-faint uppercase">{kind === '/' ? 'Commands & skills' : 'Subagents'}</div>
-      {items.map((it, i) => {
-        const Icon = kind === '@' ? Bot : (SOURCE_ICON[it.source] ?? Terminal)
-        return (
-          <button
-            key={it.key}
-            type="button"
-            role="option"
-            aria-selected={i === active}
-            onMouseEnter={() => onHover(i)}
-            onMouseDown={(e) => {
-              e.preventDefault()
-              onPick(it)
-            }}
-            ref={(el) => {
-              if (i === active) el?.scrollIntoView({ block: 'nearest' })
-            }}
-            className={clsx('flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left', i === active ? 'bg-hover' : 'hover:bg-hover/60')}
-          >
-            <Icon className="size-3.5 shrink-0 text-faint" />
-            <span className="shrink-0 font-mono text-[13px] text-fg">{it.label}</span>
-            <span className="min-w-0 flex-1 truncate text-xs text-muted">{it.description}</span>
-            <span className="shrink-0 text-2xs text-faint">{it.source}</span>
-          </button>
-        )
-      })}
-      <div className="px-2.5 pt-1 pb-1 text-2xs text-faint">↑↓ choose · ↵ or Tab insert · Esc close</div>
+    <div className="menu-in overflow-hidden rounded-2xl border border-line bg-raised shadow-[0_12px_40px_-8px_rgb(0_0_0/0.5)]">
+      <div id={id} role="listbox" aria-label={kind === '/' ? 'Commands' : 'Subagents'} className="max-h-80 overflow-y-auto py-2">
+        {items.length === 0 && (
+          <div className="px-4 py-3 text-sm text-muted">
+            {loading ? 'Loading commands…' : query ? `Nothing matches “${query}”.` : kind === '/' ? 'No commands available yet.' : 'No subagents yet.'}
+          </div>
+        )}
+        {items.map((it, i) => (
+          <div key={it.key}>
+            {(i === 0 || items[i - 1].group !== it.group) && (
+              <div role="presentation" className={clsx('px-4 pb-1 text-xs font-medium text-muted', i > 0 ? 'mt-2 pt-2' : 'pt-1')}>
+                {it.group}
+              </div>
+            )}
+            <div
+              id={`${id}-${i}`}
+              role="option"
+              aria-selected={i === active}
+              onMouseEnter={() => onHover(i)}
+              onMouseDown={(e) => {
+                e.preventDefault() // keep focus in the message box
+                onPick(it)
+              }}
+              ref={(el) => {
+                if (i === active) el?.scrollIntoView({ block: 'nearest' })
+              }}
+              className={clsx('mx-2 flex min-h-12 cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5', i === active ? 'bg-active' : 'hover:bg-hover')}
+            >
+              {it.group === 'Skills' ? <Sparkles className="size-4 shrink-0 text-muted" /> : it.group === 'Plugins' ? <Puzzle className="size-4 shrink-0 text-muted" /> : <Icon className="size-4 shrink-0 text-muted" />}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-fg">{it.label}</div>
+                {it.description && <div className="truncate text-xs text-muted">{it.description}</div>}
+              </div>
+              {it.runsAlone && i === active && <span className="shrink-0 text-xs text-muted">↵ run</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-line px-4 py-2 text-xs text-muted">↑↓ to choose · ↵ to pick · Esc to close</div>
     </div>
   )
 }

@@ -54,15 +54,16 @@ export function Button({
       {...rest}
       disabled={disabled || loading}
       className={clsx(
-        'press no-drag inline-flex items-center justify-center gap-2 rounded-lg font-medium whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/50',
-        size === 'sm' && 'h-8 px-3 text-sm',
-        size === 'md' && 'h-9 px-3.5 text-sm',
-        size === 'lg' && 'h-11 px-5 text-base',
-        variant === 'primary' && 'bg-accent text-ink shadow-sm hover:bg-accent-strong',
-        variant === 'success' && 'bg-ok text-ink shadow-sm hover:brightness-110',
-        variant === 'secondary' && 'border border-line-strong bg-raised text-fg shadow-xs hover:border-fg/20 hover:bg-hover',
-        variant === 'ghost' && 'text-muted hover:bg-hover hover:text-fg',
-        variant === 'danger' && 'border border-bad/40 bg-bad/10 text-bad hover:bg-bad/20',
+        // Material 3 common buttons: pill shaped, 40px tall (36px small), label-large text.
+        'press no-drag inline-flex items-center justify-center gap-2 rounded-full font-medium whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40',
+        size === 'sm' && 'h-9 px-4 text-sm',
+        size === 'md' && 'h-10 px-5 text-sm',
+        size === 'lg' && 'h-12 px-6 text-base',
+        variant === 'primary' && 'bg-accent text-ink hover:bg-accent-strong',
+        variant === 'success' && 'bg-ok text-ink hover:brightness-110',
+        variant === 'secondary' && 'bg-hover text-fg hover:bg-active',
+        variant === 'ghost' && 'px-3 text-fg/90 hover:bg-hover hover:text-fg',
+        variant === 'danger' && 'border border-bad/50 text-bad hover:bg-bad/10',
         className
       )}
     >
@@ -90,8 +91,9 @@ export function IconButton({
       title={label}
       aria-label={title}
       className={clsx(
-        'press no-drag inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-fg disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/50',
-        active && 'bg-hover text-fg',
+        // Material 3 standard icon button: 40px round target.
+        'press no-drag inline-flex size-10 shrink-0 items-center justify-center rounded-full text-muted hover:bg-hover hover:text-fg disabled:opacity-40',
+        active && 'bg-active text-fg',
         className
       )}
     >
@@ -105,7 +107,7 @@ export function Input({ className, ...rest }: ComponentProps<'input'>) {
     <input
       {...rest}
       className={clsx(
-        'h-9 w-full rounded-lg border border-line-strong bg-bg/60 px-3 text-sm text-fg placeholder:text-faint outline-none transition-[border-color,box-shadow] focus:border-info/60 focus:ring-3 focus:ring-info/15 disabled:opacity-60',
+        'h-10 w-full rounded-xl border border-line-strong bg-bg/60 px-3 text-sm text-fg placeholder:text-faint outline-none transition-[border-color,box-shadow] focus:border-info/60 focus:ring-3 focus:ring-info/15 disabled:opacity-60',
         className
       )}
     />
@@ -117,7 +119,7 @@ export function Textarea({ className, ...rest }: ComponentProps<'textarea'>) {
     <textarea
       {...rest}
       className={clsx(
-        'w-full resize-none rounded-lg border border-line-strong bg-bg/60 px-3 py-2 text-sm text-fg placeholder:text-faint outline-none transition-[border-color,box-shadow] focus:border-info/60 focus:ring-3 focus:ring-info/15',
+        'w-full resize-none rounded-xl border border-line-strong bg-bg/60 px-3 py-2 text-sm text-fg placeholder:text-faint outline-none transition-[border-color,box-shadow] focus:border-info/60 focus:ring-3 focus:ring-info/15',
         className
       )}
     />
@@ -128,7 +130,7 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
   return (
     <select
       {...rest}
-      className={clsx('h-9 rounded-lg border border-line-strong bg-bg/60 px-2.5 text-sm text-fg outline-none transition-[border-color,box-shadow] focus:border-info/60 focus:ring-3 focus:ring-info/15', className)}
+      className={clsx('h-10 rounded-xl border border-line-strong bg-bg/60 px-2.5 text-sm text-fg outline-none transition-[border-color,box-shadow] focus:border-info/60 focus:ring-3 focus:ring-info/15', className)}
     >
       {children}
     </select>
@@ -147,15 +149,22 @@ export function Field({ label, hint, children }: { label: string; hint?: ReactNo
 
 export function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; hint?: ReactNode }) {
   return (
-    <label className="flex cursor-pointer items-start gap-3 text-sm text-fg">
+    <label className="flex cursor-pointer items-center gap-3 text-sm text-fg">
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={clsx('relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors', checked ? 'bg-accent' : 'bg-line-strong')}
+        className={clsx('relative h-8 w-[52px] shrink-0 rounded-full border-2 transition-colors', checked ? 'border-accent bg-accent' : 'border-muted/70 bg-hover')}
       >
-        <span className={clsx('absolute top-0.5 size-4 rounded-full bg-white shadow transition-all', checked ? 'left-[18px]' : 'left-0.5')} />
+        <span
+          className={clsx(
+            'absolute top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full transition-all',
+            checked ? 'left-[22px] size-6 bg-ink text-fg' : 'left-[6px] size-4 bg-muted'
+          )}
+        >
+          {checked && <Check className="size-3.5" strokeWidth={3} />}
+        </span>
       </button>
       <span className="flex flex-col gap-0.5">
         <span>{label}</span>
@@ -177,7 +186,7 @@ export function Badge({
   return (
     <span
       className={clsx(
-        'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-semibold tracking-wide uppercase',
+        'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium',
         tone === 'neutral' && 'bg-hover text-muted',
         tone === 'ok' && 'bg-ok/15 text-ok',
         tone === 'warn' && 'bg-warn/15 text-warn',
@@ -218,7 +227,7 @@ export function Segmented<T extends string>({
     onChange(n.value)
   }
   return (
-    <div role="radiogroup" onKeyDown={onKey} className={clsx('inline-flex rounded-lg border border-line-strong bg-bg/60 p-0.5', className)}>
+    <div role="radiogroup" onKeyDown={onKey} className={clsx('inline-flex overflow-hidden rounded-full border border-line-strong', className)}>
       {options.map((o) => (
         <button
           key={o.value}
@@ -229,11 +238,13 @@ export function Segmented<T extends string>({
           title={o.title}
           onClick={() => onChange(o.value)}
           className={clsx(
-            'press no-drag flex items-center gap-1.5 rounded-md font-medium',
-            size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-8 px-3 text-sm',
-            o.value === value ? 'bg-bg text-fg shadow-sm ring-1 ring-line-strong' : 'text-muted hover:text-fg'
+            'no-drag flex items-center justify-center gap-1.5 border-line-strong font-medium transition-colors [&:not(:first-child)]:border-l',
+            size === 'sm' ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-sm',
+            o.value === value ? 'bg-active text-fg' : 'text-muted hover:bg-hover hover:text-fg'
           )}
         >
+          {/* M3: the selected segment shows a check — unless the label already carries its own icon */}
+          {o.value === value && typeof o.label === 'string' && <Check className="size-3.5 shrink-0" strokeWidth={2.5} />}
           {o.label}
         </button>
       ))}
@@ -285,7 +296,7 @@ export function OptionList<T extends string>({
     }
   }
   return (
-    <div ref={ref} role="listbox" tabIndex={0} onKeyDown={onKey} className={clsx('flex flex-col gap-0.5 outline-none', className)}>
+    <div ref={ref} role="listbox" tabIndex={0} onKeyDown={onKey} aria-activedescendant={undefined} className={clsx('flex flex-col gap-0.5 outline-none focus-visible:outline-none [&:focus-visible_[data-idx]:hover]:bg-hover', className)}>
       {options.map((o, i) => (
         <button
           key={o.value}
@@ -297,7 +308,7 @@ export function OptionList<T extends string>({
           onMouseEnter={() => setActive(i)}
           onClick={() => onSelect(o.value)}
           className={clsx(
-            'flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors',
+            'flex min-h-11 w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors',
             i === active ? 'bg-hover' : 'hover:bg-hover/60'
           )}
         >
@@ -353,7 +364,7 @@ export function Popover({
     <div
       ref={ref}
       className={clsx(
-        'pop-in absolute left-0 z-40 rounded-xl border border-line-strong bg-panel p-2 shadow-2xl',
+        'menu-in absolute left-0 z-40 rounded-2xl border border-line bg-raised p-2 shadow-[0_12px_40px_-8px_rgb(0_0_0/0.5)]',
         placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2',
         className
       )}
@@ -419,18 +430,18 @@ export function Modal({
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        className="pop-in flex max-h-[86vh] flex-col overflow-hidden rounded-2xl border border-line-strong bg-panel shadow-2xl"
+        className="menu-in flex max-h-[86vh] flex-col overflow-hidden rounded-[28px] border border-line bg-panel shadow-2xl focus-visible:outline-none"
         style={{ width: `min(${width}px, calc(100vw - 32px))` }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
-          <div className="text-base font-semibold">{title}</div>
+        <div className="flex items-center justify-between gap-3 px-6 pt-5 pb-3">
+          <h2 className="text-xl font-semibold">{title}</h2>
           <IconButton title="Close (Esc)" onClick={onClose}>
             <X className="size-4" />
           </IconButton>
         </div>
-        <div className={clsx('min-h-0 flex-1 overflow-y-auto', padded && 'px-5 py-5')}>{children}</div>
-        {footer && <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3.5">{footer}</div>}
+        <div className={clsx('min-h-0 flex-1 overflow-y-auto', padded && 'px-6 pt-1 pb-5')}>{children}</div>
+        {footer && <div className="flex items-center justify-end gap-2 px-6 pt-2 pb-5">{footer}</div>}
       </div>
     </div>
   )
@@ -449,7 +460,7 @@ export function Empty({ icon, title, children }: { icon?: ReactNode; title: stri
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between">
-      <div className="text-xs font-semibold tracking-wider text-faint uppercase">{children}</div>
+      <h3 className="text-sm font-semibold text-muted">{children}</h3>
       {right}
     </div>
   )
@@ -462,4 +473,140 @@ export function timeAgo(ts: number | string): string {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`
   return `${Math.floor(s / 86400)}d ago`
+}
+
+export interface MenuEntry {
+  key: string
+  label: ReactNode
+  icon?: ReactNode
+  description?: ReactNode
+  /** e.g. a count badge or shortcut */
+  trailing?: ReactNode
+  checked?: boolean
+  danger?: boolean
+  disabled?: boolean
+  onSelect: () => void
+}
+
+/**
+ * Material 3 menu: a list of choices on a temporary surface. ↑/↓/Home/End move, Enter/Space choose,
+ * Esc or Tab closes and focus returns to the button that opened it.
+ */
+export function Menu({
+  items,
+  label,
+  renderTrigger,
+  placement = 'bottom',
+  align = 'left',
+  width = 280,
+  header
+}: {
+  items: (MenuEntry | 'divider')[]
+  /** accessible name of the menu */
+  label: string
+  renderTrigger: (p: {
+    open: boolean
+    toggle: () => void
+    /** spread onto the trigger button */
+    props: { ref: (el: HTMLButtonElement | null) => void; 'aria-haspopup': 'menu'; 'aria-expanded': boolean; 'data-popover-anchor': true }
+  }) => ReactNode
+  placement?: 'top' | 'bottom'
+  align?: 'left' | 'right'
+  width?: number
+  header?: ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  const trigger = useRef<HTMLButtonElement | null>(null)
+  const list = useRef<HTMLDivElement>(null)
+  const close = (refocus = true) => {
+    setOpen(false)
+    if (refocus) trigger.current?.focus()
+  }
+  useEffect(() => {
+    if (!open) return
+    list.current?.querySelector<HTMLElement>('[role^="menuitem"]:not([disabled])')?.focus()
+    const onDown = (e: MouseEvent) => {
+      if (!list.current?.contains(e.target as Node) && !trigger.current?.contains(e.target as Node)) setOpen(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    return () => window.removeEventListener('mousedown', onDown)
+  }, [open])
+  const onKey = (e: ReactKeyboardEvent) => {
+    const els = [...(list.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([disabled])') ?? [])]
+    const i = els.indexOf(document.activeElement as HTMLElement)
+    const go = (n: number) => {
+      e.preventDefault()
+      els[(n + els.length) % els.length]?.focus()
+    }
+    if (e.key === 'ArrowDown') go(i + 1)
+    else if (e.key === 'ArrowUp') go(i - 1)
+    else if (e.key === 'Home') go(0)
+    else if (e.key === 'End') go(els.length - 1)
+    else if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      close()
+    } else if (e.key === 'Tab') close(false)
+  }
+  return (
+    <div className="relative">
+      {renderTrigger({
+        open,
+        toggle: () => setOpen((o) => !o),
+        props: {
+          ref: (el) => {
+            trigger.current = el
+          },
+          'aria-haspopup': 'menu',
+          'aria-expanded': open,
+          'data-popover-anchor': true
+        }
+      })}
+      {open && (
+        <div
+          ref={list}
+          role="menu"
+          aria-label={label}
+          onKeyDown={onKey}
+          style={{ width }}
+          className={clsx(
+            'menu-in absolute z-50 max-h-[70vh] overflow-y-auto rounded-2xl border border-line bg-raised py-2 shadow-[0_12px_40px_-8px_rgb(0_0_0/0.5)]',
+            placement === 'bottom' ? 'top-full mt-1.5' : 'bottom-full mb-1.5',
+            align === 'right' ? 'right-0' : 'left-0'
+          )}
+        >
+          {header}
+          {items.map((it, i) =>
+            it === 'divider' ? (
+              <div key={`d${i}`} role="separator" className="my-2 h-px bg-line" />
+            ) : (
+              <button
+                key={it.key}
+                type="button"
+                role={it.checked === undefined ? 'menuitem' : 'menuitemradio'}
+                aria-checked={it.checked}
+                disabled={it.disabled}
+                onClick={() => {
+                  close()
+                  it.onSelect()
+                }}
+                className={clsx(
+                  'flex min-h-11 w-full items-center gap-3 px-4 py-2 text-left text-sm outline-none hover:bg-hover focus-visible:bg-hover disabled:opacity-40',
+                  it.danger ? 'text-bad' : 'text-fg'
+                )}
+              >
+                {it.icon !== undefined && <span className={clsx('flex size-5 shrink-0 items-center justify-center', it.danger ? 'text-bad' : 'text-muted')}>{it.icon}</span>}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{it.label}</span>
+                  {it.description && <span className="block text-xs leading-snug text-muted">{it.description}</span>}
+                </span>
+                {it.trailing}
+                {it.checked && <Check className="size-4 shrink-0" />}
+              </button>
+            )
+          )}
+        </div>
+      )}
+    </div>
+  )
 }

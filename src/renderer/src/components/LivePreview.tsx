@@ -1,11 +1,11 @@
 import clsx from 'clsx'
-import { AlertTriangle, ArrowLeft, ArrowRight, ExternalLink, Monitor, MousePointerClick, RotateCw, Send, Smartphone, Tablet, Trash2, Wand2, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, ExternalLink, Monitor, MoreVertical, MousePointerClick, RotateCw, Send, Smartphone, Tablet, Trash2, Wand2, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
 import type { Attachment, AuthTarget } from '@shared/types'
 import { LoginAs } from './LoginAs'
 import { uid } from '@shared/util'
-import { Button, IconButton, Segmented } from './ui'
+import { Button, IconButton, Menu } from './ui'
 
 interface WebviewEl extends HTMLElement {
   src: string
@@ -255,15 +255,12 @@ export function LivePreview({ notesKey, url: siteUrl, partition, active = true, 
   const width = VIEWPORTS[viewport]
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-1 border-b border-line px-2 py-1.5">
+      <div className="flex items-center gap-1 border-b border-line px-2 py-2">
         <IconButton title="Back" onClick={() => ref.current?.goBack()}>
-          <ArrowLeft className="size-4" />
-        </IconButton>
-        <IconButton title="Forward" onClick={() => ref.current?.goForward()}>
-          <ArrowRight className="size-4" />
+          <ArrowLeft className="size-5" />
         </IconButton>
         <IconButton title="Reload (⌘R)" onClick={reload}>
-          <RotateCw className="size-4" />
+          <RotateCw className="size-[18px]" />
         </IconButton>
         <form
           className="min-w-0 flex-1"
@@ -276,38 +273,39 @@ export function LivePreview({ notesKey, url: siteUrl, partition, active = true, 
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             aria-label="Address"
-            className="h-8 w-full rounded-lg bg-raised px-2.5 font-mono text-xs text-muted outline-none focus:text-fg"
+            className="h-10 w-full rounded-full bg-raised px-4 font-mono text-xs text-muted outline-none focus:text-fg focus-visible:ring-3 focus-visible:ring-focus"
           />
         </form>
-        <Segmented<Viewport>
-          size="sm"
-          value={viewport}
-          onChange={setViewport}
-          options={[
-            { value: 'desktop', label: <Monitor className="size-4" />, title: 'Desktop' },
-            { value: 'tablet', label: <Tablet className="size-4" />, title: 'Tablet (820px)' },
-            { value: 'mobile', label: <Smartphone className="size-4" />, title: 'Mobile (390px)' }
-          ]}
-        />
         {stale && (
           <button
             type="button"
             onClick={reload}
             title="The AI finished a turn. Reload to see its changes — your current page state is kept until you do."
-            className="ml-1 flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-info/15 px-2.5 text-xs font-semibold text-info hover:bg-info/25"
+            className="press flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-info/15 px-3 text-sm font-medium text-info hover:bg-info/25"
           >
-            <RotateCw className="size-3.5" /> New changes — reload
+            <RotateCw className="size-4" /> Reload
           </button>
         )}
         {errors.length > 0 && (
           <button
             type="button"
             onClick={() => setShowErrors(!showErrors)}
-            className="ml-1 flex h-8 items-center gap-1.5 rounded-lg bg-bad/15 px-2.5 text-xs font-medium text-bad hover:bg-bad/25"
+            aria-expanded={showErrors}
+            title="Errors the page reported"
+            className="press flex h-10 items-center gap-1.5 rounded-full bg-bad/15 px-3 text-sm font-medium text-bad hover:bg-bad/25"
           >
-            <AlertTriangle className="size-3.5" /> {errors.length}
+            <AlertTriangle className="size-4" /> {errors.length}
           </button>
         )}
+        <button
+          type="button"
+          onClick={startPicking}
+          aria-pressed={picking}
+          title="Point at parts of the page and say what to change"
+          className={clsx('press flex h-10 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-medium', picking ? 'bg-accent text-ink' : 'bg-hover text-fg hover:bg-active')}
+        >
+          <MousePointerClick className="size-4" /> Comment
+        </button>
         {auth && (
           <LoginAs
             target={auth}
@@ -320,17 +318,33 @@ export function LivePreview({ notesKey, url: siteUrl, partition, active = true, 
             }}
           />
         )}
-        <IconButton title="Open in browser" onClick={() => void window.api.openExternal(url)}>
-          <ExternalLink className="size-4" />
-        </IconButton>
+        <Menu
+          label="Preview options"
+          align="right"
+          width={250}
+          items={[
+            { key: 'fwd', label: 'Forward', icon: <ArrowRight className="size-4" />, onSelect: () => ref.current?.goForward() },
+            'divider',
+            { key: 'desktop', label: 'Desktop size', icon: <Monitor className="size-4" />, checked: viewport === 'desktop', onSelect: () => setViewport('desktop') },
+            { key: 'tablet', label: 'Tablet size', description: '820px wide', icon: <Tablet className="size-4" />, checked: viewport === 'tablet', onSelect: () => setViewport('tablet') },
+            { key: 'mobile', label: 'Phone size', description: '390px wide', icon: <Smartphone className="size-4" />, checked: viewport === 'mobile', onSelect: () => setViewport('mobile') },
+            'divider',
+            { key: 'open', label: 'Open in your browser', icon: <ExternalLink className="size-4" />, onSelect: () => void window.api.openExternal(url) }
+          ]}
+          renderTrigger={(p) => (
+            <IconButton {...p.props} title="Preview options" onClick={p.toggle} active={p.open}>
+              <MoreVertical className="size-5" />
+            </IconButton>
+          )}
+        />
       </div>
 
-      <div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-2">
-        <Button size="sm" variant={picking ? 'primary' : 'secondary'} icon={<MousePointerClick className="size-4" />} onClick={startPicking}>
-          {picking ? 'Click an element… (Esc to cancel)' : 'Point at something to change'}
-        </Button>
-        <span className="truncate text-xs text-faint">{picking ? 'Hover the page — the highlighted part is what you’ll comment on.' : 'Pick parts of the page, say what to change, and send them all at once.'}</span>
-      </div>
+      {picking && (
+        <div role="status" className="flex items-center gap-2 border-b border-line bg-info/10 px-4 py-2 text-sm text-fg">
+          <MousePointerClick className="size-4 text-info" />
+          <span className="min-w-0 flex-1 truncate">Click the part you want to change. Esc to stop.</span>
+        </div>
+      )}
 
       {banner}
       {showErrors && errors.length > 0 && (

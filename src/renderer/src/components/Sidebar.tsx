@@ -75,15 +75,14 @@ function ThreadRow({ f, index, showProject }: { f: Feature; index: number; showP
       aria-current={selected ? 'true' : undefined}
       title={`${f.title}\n${state} · ${timeAgo(f.updatedAt)}`}
       className={clsx(
-        'press group relative flex h-8 w-full items-center gap-2 rounded-lg pr-1.5 pl-2.5 text-left',
-        selected ? 'bg-active text-fg' : unseen || waiting ? 'text-fg hover:bg-hover' : 'text-muted hover:bg-hover hover:text-fg'
+        'press group relative flex h-10 w-full items-center gap-2.5 rounded-full pr-3 pl-3.5 text-left',
+        selected ? 'bg-active font-medium text-fg' : unseen || waiting ? 'text-fg hover:bg-hover' : 'text-muted hover:bg-hover hover:text-fg'
       )}
     >
-      {selected && <span className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-full bg-fg" aria-hidden />}
       <span className="flex size-4 shrink-0 items-center justify-center">
         {isChat ? <MessageSquare className="size-3.5 opacity-70" /> : <GitBranch className={clsx('size-3.5', stageTone(f.stage))} />}
       </span>
-      <span className={clsx('min-w-0 flex-1 truncate text-[13px]', (unseen || waiting) && 'font-medium')}>
+      <span className={clsx('min-w-0 flex-1 truncate text-sm', (unseen || waiting) && 'font-medium')}>
         {f.title}
         {project && <span className="ml-1.5 text-2xs text-faint">{project}</span>}
       </span>
@@ -108,7 +107,7 @@ function ThreadRow({ f, index, showProject }: { f: Feature; index: number; showP
 
 function SectionLabel({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
   return (
-    <div className="flex h-7 items-center gap-1 px-2.5 text-2xs font-semibold tracking-wider text-faint uppercase">
+    <div className="flex h-9 items-center gap-1 px-3.5 text-xs font-medium text-muted">
       <span className="flex-1">{children}</span>
       {right}
     </div>
@@ -208,8 +207,8 @@ function FullSidebar() {
           type="button"
           onClick={() => startNew('feature')}
           className={clsx(
-            'press flex h-9 items-center gap-2 rounded-lg border px-2.5 text-sm font-medium shadow-xs',
-            view === 'new' && draftKind === 'feature' ? 'border-fg/25 bg-active text-fg' : 'border-line-strong bg-raised text-fg hover:border-fg/20 hover:bg-hover'
+            'press flex h-12 items-center gap-3 rounded-2xl px-4 text-sm font-medium',
+            view === 'new' && draftKind === 'feature' ? 'bg-active text-fg' : 'bg-hover text-fg hover:bg-active'
           )}
         >
           <Plus className="size-4" />
@@ -220,7 +219,7 @@ function FullSidebar() {
           type="button"
           onClick={() => startNew('chat')}
           className={clsx(
-            'press flex h-8 items-center gap-2 rounded-lg px-2.5 text-sm',
+            'press flex h-10 items-center gap-3 rounded-full px-4 text-sm',
             view === 'new' && draftKind === 'chat' ? 'bg-active text-fg' : 'text-muted hover:bg-hover hover:text-fg'
           )}
         >
@@ -228,7 +227,7 @@ function FullSidebar() {
           <span className="flex-1 text-left">New chat</span>
           <Kbd keys={shortcutFor('new-chat')} />
         </button>
-        <label className="mt-1 flex h-8 items-center gap-2 rounded-lg border border-transparent bg-hover/60 px-2.5 text-sm transition-colors focus-within:border-line-strong focus-within:bg-bg">
+        <label className="mt-1 flex h-10 items-center gap-2.5 rounded-full bg-hover/60 px-4 text-sm transition-colors focus-within:bg-hover focus-within:ring-3 focus-within:ring-focus">
           <Search className="size-3.5 shrink-0 text-faint" />
           <input
             value={query}
@@ -236,7 +235,7 @@ function FullSidebar() {
             onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
             placeholder="Search threads"
             aria-label="Search threads"
-            className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-faint"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
           />
           {query && (
             <button type="button" aria-label="Clear search" onClick={() => setQuery('')} className="text-faint hover:text-fg">
@@ -264,21 +263,21 @@ function FullSidebar() {
           const shown = expanded[p.id] || q ? list : list.slice(0, PER_PROJECT)
           return (
             <div key={p.id} className="mb-2">
-              <div className="group flex h-7 items-center gap-0.5 rounded-lg pr-1 hover:bg-hover/60">
+              <div className="group flex h-9 items-center gap-0.5 rounded-full pr-1 hover:bg-hover/60">
                 <button
                   type="button"
                   aria-expanded={!isCollapsed}
-                  className="flex min-w-0 flex-1 items-center gap-1 px-1.5 text-left"
+                  className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5 text-left"
                   onClick={() => setCollapsed({ ...collapsed, [p.id]: !isCollapsed })}
                 >
                   <ChevronRight className={clsx('size-3.5 shrink-0 text-faint transition-transform', !isCollapsed && 'rotate-90')} />
-                  <span className="truncate text-2xs font-semibold tracking-wider text-faint uppercase">{p.name}</span>
+                  <span className="truncate text-xs font-medium text-muted">{p.name}</span>
                   <ProjectDeployDot projectId={p.id} />
                 </button>
-                <IconButton title="Project settings" className="size-6 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100" onClick={() => openModal({ kind: 'project', projectId: p.id })}>
+                <IconButton title="Project settings" className="size-8 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100" onClick={() => openModal({ kind: 'project', projectId: p.id })}>
                   <Settings className="size-3.5" />
                 </IconButton>
-                <IconButton title={`${w.newFeature} in ${p.name}`} className="size-6 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100" onClick={() => startNew('feature', p.id)}>
+                <IconButton title={`${w.newFeature} in ${p.name}`} className="size-8 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100" onClick={() => startNew('feature', p.id)}>
                   <Plus className="size-3.5" />
                 </IconButton>
               </div>
@@ -288,12 +287,12 @@ function FullSidebar() {
                     <ThreadRow key={f.id} f={f} index={indexOf(f)} />
                   ))}
                   {list.length > shown.length && (
-                    <button type="button" onClick={() => setExpanded({ ...expanded, [p.id]: true })} className="press flex h-7 items-center gap-2 rounded-lg pl-8 text-left text-xs text-faint hover:bg-hover hover:text-fg">
+                    <button type="button" onClick={() => setExpanded({ ...expanded, [p.id]: true })} className="press flex h-9 items-center gap-2 rounded-full pl-10 text-left text-xs text-muted hover:bg-hover hover:text-fg">
                       Show {list.length - shown.length} more
                     </button>
                   )}
                   {list.length === 0 && (
-                    <button type="button" onClick={() => startNew('feature', p.id)} className="press flex h-7 items-center rounded-lg pl-8 text-left text-xs text-faint hover:bg-hover hover:text-muted">
+                    <button type="button" onClick={() => startNew('feature', p.id)} className="press flex h-9 items-center rounded-full pl-10 text-left text-xs text-muted hover:bg-hover hover:text-fg">
                       {w.newFeature}…
                     </button>
                   )}
@@ -313,11 +312,11 @@ function FullSidebar() {
                 writeFlag('sf.doneOpen', !doneOpen)
                 setDoneOpen(!doneOpen)
               }}
-              className="press flex h-7 w-full items-center gap-1 rounded-lg px-1.5 text-left hover:bg-hover/60"
+              className="press flex h-9 w-full items-center gap-1.5 rounded-full px-2.5 text-left hover:bg-hover/60"
             >
               <ChevronRight className={clsx('size-3.5 text-faint transition-transform', showDone && 'rotate-90')} />
               <Archive className="size-3.5 text-faint" />
-              <span className="flex-1 text-2xs font-semibold tracking-wider text-faint uppercase">Done & older</span>
+              <span className="flex-1 text-xs font-medium text-muted">Done & older</span>
               <span className="rounded-full bg-hover px-1.5 text-2xs text-faint tabular-nums">{done.length}</span>
             </button>
             {showDone && (

@@ -38,7 +38,7 @@ export const SHORTCUTS: Shortcut[] = [
 
   { id: 'tab-preview', label: 'Preview', group: 'Panels', keys: 'mod+alt+1' },
   { id: 'tab-changes', label: 'Changes', group: 'Panels', keys: 'mod+alt+2' },
-  { id: 'tab-ship', label: 'Review / Ship', group: 'Panels', keys: 'mod+alt+3' },
+  { id: 'tab-ship', label: 'Review & ship', group: 'Panels', keys: 'mod+alt+3' },
   { id: 'tab-email', label: 'Email', group: 'Panels', keys: 'mod+alt+4' },
   { id: 'tab-data', label: 'Data', group: 'Panels', keys: 'mod+alt+5' },
   { id: 'tab-logs', label: 'Logs', group: 'Panels', keys: 'mod+alt+6' },

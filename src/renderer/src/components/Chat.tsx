@@ -46,12 +46,12 @@ const ToolRow = memo(function ToolRow({ item }: { item: ChatItem }) {
   const [open, setOpen] = useState(false)
   const t = item.tool!
   return (
-    <div className="rounded-xl border border-line bg-panel/70">
+    <div className="rounded-2xl bg-raised/70">
       <button
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm"
+        className="flex min-h-10 w-full items-center gap-2.5 rounded-2xl px-3 py-2 text-left text-sm hover:bg-hover/60"
       >
         <ChevronRight className={clsx('size-3.5 shrink-0 text-faint transition-transform', open && 'rotate-90')} />
         <span className="text-muted">{toolIcon(t.name)}</span>
@@ -86,7 +86,7 @@ const TodoCard = memo(function TodoCard({ item, latest, todos }: { item: ChatIte
   useEffect(() => setOpen(latest), [latest])
   if (!todos.length) return <ToolRow item={item} />
   return (
-    <div className="rise-in rounded-xl border border-line bg-panel/70">
+    <div className="rise-in rounded-2xl bg-raised/70">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm">
         <ListTodo className="size-4 text-muted" />
         <span className="font-medium">{latest ? 'Plan' : 'Plan updated'}</span>
@@ -128,7 +128,7 @@ const SubagentCard = memo(function SubagentCard({ item, steps }: { item: ChatIte
   const tools = steps.filter((s) => s.role === 'tool')
   const current = [...steps].reverse().find((s) => s.tool?.status === 'running')
   return (
-    <div className={clsx('rise-in rounded-xl border bg-panel/70', t.status === 'running' ? 'border-info/30' : 'border-line')}>
+    <div className={clsx('rise-in rounded-2xl', t.status === 'running' ? 'bg-info/10' : 'bg-raised/70')}>
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm">
         <ChevronRight className={clsx('size-3.5 shrink-0 text-faint transition-transform', open && 'rotate-90')} />
         <Bot className="size-4 text-muted" />
@@ -204,7 +204,7 @@ function CreatorSetupCard({ item, lines }: { item: ChatItem; lines: string[] }) 
   const needsOk = lines.some((l) => l.includes('haven’t approved'))
   const pct = item.status === 'ok' ? 100 : Math.min(92, Math.round((done / Math.max(7, done + 1)) * 100))
   return (
-    <div className={clsx('rise-in rounded-xl border px-4 py-3.5', failed ? 'border-bad/30 bg-bad/5' : 'border-line bg-raised/40')}>
+    <div className={clsx('rise-in rounded-2xl px-4 py-3.5', failed ? 'bg-bad/12' : 'bg-raised')}>
       <div className="flex items-center gap-2.5">
         {item.status === 'running' ? <Spinner className="text-info" /> : failed ? <AlertTriangle className="size-4 text-bad" /> : <Check className="size-4 text-ok" />}
         <span className="text-sm font-medium">
@@ -272,8 +272,8 @@ function StatusCard({ item }: { item: ChatItem }) {
   return (
     <div
       className={clsx(
-        'rounded-xl border px-4 py-3',
-        item.status === 'error' ? 'border-bad/30 bg-bad/5' : item.status === 'ok' ? 'border-line bg-raised/40' : 'border-line-strong bg-panel'
+        'rounded-2xl px-4 py-3',
+        item.status === 'error' ? 'bg-bad/12' : 'bg-raised'
       )}
     >
       <div className="mb-1.5 flex items-center gap-2 text-sm font-medium">
@@ -366,7 +366,7 @@ const Message = memo(function Message({ item, steps, plan }: { item: ChatItem; s
     case 'user':
       return (
         <div className="rise-in flex justify-end">
-          <div className="selectable max-w-[85%] rounded-2xl rounded-br-md border border-line bg-raised px-4 py-2.5 text-base leading-relaxed whitespace-pre-wrap shadow-xs">{item.text}</div>
+          <div className="selectable max-w-[85%] rounded-3xl rounded-br-lg bg-active px-4 py-2.5 text-base leading-relaxed whitespace-pre-wrap">{item.text}</div>
         </div>
       )
     case 'assistant':
@@ -379,7 +379,7 @@ const Message = memo(function Message({ item, steps, plan }: { item: ChatItem; s
       return <ToolRow item={item} />
     case 'error':
       return (
-        <div className="selectable flex gap-2.5 rounded-xl border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad">
+        <div className="selectable flex gap-2.5 rounded-2xl bg-bad/12 px-4 py-3 text-sm text-bad">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <pre className="font-sans whitespace-pre-wrap">{item.text}</pre>
         </div>
@@ -444,7 +444,7 @@ export function ThreadComposer({ feature }: { feature: Feature }) {
               : `Tell ${feature.agent === 'codex' ? 'Codex' : 'Claude'} what to build or change…`
         }
         onSubmit={(text) => actOk(() => window.api.sendPrompt(feature.id, text))}
-        footerRight={feature.costUsd ? <span className="mr-2 text-xs text-faint tabular-nums">${feature.costUsd.toFixed(2)}</span> : null}
+        costUsd={feature.costUsd}
       />
     </div>
   )

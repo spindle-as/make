@@ -6,9 +6,9 @@
   --font-script: 'Ms Madi', cursive;
 
   /* type scale tuned for readability (base 14.5px) */
-  --text-2xs: 11.5px;
+  --text-2xs: 12px;
   --text-2xs--line-height: 1.45;
-  --text-xs: 12.5px;
+  --text-xs: 13px;
   --text-xs--line-height: 1.5;
   --text-sm: 13.5px;
   --text-sm--line-height: 1.5;
@@ -31,8 +31,8 @@
   --color-line: #242429;
   --color-line-strong: #33333a;
   --color-fg: #ededf0;
-  --color-muted: #a1a1aa;
-  --color-faint: #71717a;
+  --color-muted: #b4b4bc;
+  --color-faint: #90909a;
   --color-accent: #ededf0;
   --color-accent-strong: #ffffff;
   --color-ok: #4ade80;
@@ -45,6 +45,8 @@
   --color-code-block: #0b0b0d;
   --color-scroll: #2c2c33;
   --color-scroll-hover: #3d3d45;
+  /* keyboard focus ring */
+  --color-focus: #8ab4ff;
 }
 
 /* Light theme: follows macOS unless a theme is picked in Settings → Appearance. */
@@ -58,8 +60,8 @@
     --color-line: #e7e7ea;
     --color-line-strong: #d6d6db;
     --color-fg: #17171a;
-    --color-muted: #55555f;
-    --color-faint: #8a8a94;
+    --color-muted: #4a4a53;
+    --color-faint: #686872;
     --color-accent: #17171a;
     --color-accent-strong: #000000;
     --color-ok: #16a34a;
@@ -71,6 +73,7 @@
     --color-code-block: #f6f6f8;
     --color-scroll: #d4d4d8;
     --color-scroll-hover: #b8b8bf;
+    --color-focus: #1d4ed8;
   }
 }
 :root[data-theme='light'] {
@@ -82,8 +85,8 @@
   --color-line: #e7e7ea;
   --color-line-strong: #d6d6db;
   --color-fg: #17171a;
-  --color-muted: #55555f;
-  --color-faint: #8a8a94;
+  --color-muted: #4a4a53;
+  --color-faint: #686872;
   --color-accent: #17171a;
   --color-accent-strong: #000000;
   --color-ok: #16a34a;
@@ -95,6 +98,7 @@
   --color-code-block: #f6f6f8;
   --color-scroll: #d4d4d8;
   --color-scroll-hover: #b8b8bf;
+  --color-focus: #1d4ed8;
 }
 
 html,
@@ -244,19 +248,21 @@ webview {
   background: white;
 }
 
-/* Keyboard focus is always visible; mouse focus stays quiet. */
-:focus {
-  outline: none;
-}
-:focus-visible {
-  outline: 2px solid var(--color-accent-strong);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible {
-  outline-offset: 0;
+/* Keyboard focus is always visible (Material 3: a 3px ring just outside the control); mouse focus stays quiet. */
+@layer base {
+  /* In the base layer, so a component's own focus style (outline-none + a highlight) can override it. */
+  :focus {
+    outline: none;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+  }
 }
 
 @keyframes caret-blink {
@@ -364,4 +370,19 @@ select:focus-visible {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Material 3 motion: menus and sheets grow from where they open. */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.menu-in {
+  animation: menu-in 160ms cubic-bezier(0.2, 0, 0, 1) both;
 }

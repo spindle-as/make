@@ -45,8 +45,8 @@ function Action({ children, onClick, primary, icon }: { children: ReactNode; onC
       type="button"
       onClick={onClick}
       className={clsx(
-        'flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors',
-        primary ? 'bg-accent text-ink hover:bg-accent-strong' : 'bg-raised text-fg hover:bg-hover'
+        'press flex h-10 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-medium',
+        primary ? 'bg-accent text-ink hover:bg-accent-strong' : 'bg-active text-fg hover:bg-line-strong'
       )}
     >
       {icon}
@@ -265,21 +265,22 @@ function Bar({
       role="status"
       aria-live="polite"
       className={clsx(
-        'relative mb-2 flex items-center gap-3 overflow-hidden rounded-xl border px-3.5 py-2.5 text-sm',
-        tone === 'accent' && 'border-info/35 bg-info/[0.07]',
-        tone === 'warn' && 'border-warn/50 bg-warn/15',
-        tone === 'ok' && 'border-line-strong bg-raised/60',
-        tone === 'bad' && 'border-bad/40 bg-bad/10',
-        tone === 'info' && 'border-line-strong bg-raised/60'
+        // Material 3: a tonal surface, no outline; colour only for "working", "needs you" and problems.
+        'relative mb-3 flex items-center gap-3 overflow-hidden rounded-2xl py-2.5 pr-2.5 pl-4 text-sm',
+        tone === 'accent' && 'bg-info/10',
+        tone === 'warn' && 'bg-warn/15',
+        tone === 'ok' && 'bg-raised',
+        tone === 'bad' && 'bg-bad/12',
+        tone === 'info' && 'bg-raised'
       )}
     >
       <span className={clsx('flex shrink-0', tone === 'warn' && 'text-warn', tone === 'ok' && 'text-ok', tone === 'bad' && 'text-bad', tone === 'info' && 'text-muted')}>{icon}</span>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-baseline gap-2">
           <span className="shrink-0 font-semibold">{title}</span>
-          {meta && <span className="min-w-0 truncate text-xs text-faint tabular-nums">{meta}</span>}
+          {meta && <span className="min-w-0 truncate text-xs text-muted tabular-nums">{meta}</span>}
         </div>
-        {detail && <div className="line-clamp-2 text-xs text-fg/75">{detail}</div>}
+        {detail && <div className="line-clamp-2 text-sm text-muted">{detail}</div>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
       {progress && (

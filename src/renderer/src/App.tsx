@@ -8,6 +8,7 @@ import { NewThread } from './components/NewThread'
 import { OpenProjectDialog } from './components/OpenProject'
 import { Onboarding } from './components/Onboarding'
 import { ProjectDialog } from './components/ProjectDialog'
+import { ShipDialog } from './components/ShipDialog'
 import { UpdateDialog } from './components/Updates'
 import { RightPanel } from './components/RightPanel'
 import { SettingsDialog } from './components/SettingsDialog'
@@ -135,6 +136,7 @@ export default function App() {
       {modal?.kind === 'palette' && <CommandPalette onClose={close} />}
       {modal?.kind === 'open-project' && <OpenProjectDialog onClose={close} />}
       {modal?.kind === 'update' && <UpdateDialog onClose={close} />}
+      {modal?.kind === 'ship' && <ShipDialog featureId={modal.featureId} onClose={close} />}
       <Toasts />
     </div>
   )

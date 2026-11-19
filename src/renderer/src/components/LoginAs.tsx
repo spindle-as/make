@@ -82,12 +82,12 @@ export function LoginAs({ target, partition, url, onNavigate }: { target: AuthTa
         onClick={() => setOpen(!open)}
         title="Log in as any user in this app’s database — no password needed"
         className={clsx(
-          'press no-drag flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium',
+          'press no-drag flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-medium',
           current ? 'bg-info/12 text-info hover:bg-info/20' : 'text-muted hover:bg-hover hover:text-fg',
           open && 'bg-hover text-fg'
         )}
       >
-        <UserRound className="size-3.5" />
+        <UserRound className="size-4" />
         <span className="max-w-28 truncate">{label}</span>
       </button>
       <Popover open={open} onClose={() => setOpen(false)} placement="bottom" className="right-0 left-auto w-[360px]">
