@@ -4,6 +4,8 @@ All notable changes to Spindle Make. `npm run release` moves the **Unreleased** 
 
 ## Unreleased
 
+## v0.1.4 — 2026-11-19
+
 - **Simpler, calmer interface** (following Google's Material 3 guidelines): one clear main action per area, quiet surfaces instead of outlines, pill-shaped buttons with bigger click targets, stronger text contrast and a clear keyboard focus ring everywhere.
 - **A much simpler message box**: just your message, one settings button (model, thinking effort, what the agent may do on its own, goal mode, spend limit — all in one panel) and Send. Goal mode and unusual permissions show as a small chip so you always see them.
 - **Commands that work**: the `/` menu lists only commands that work in Spindle, explains each in plain words, groups them (commands, skills, plugins), says when nothing matches, and runs commands like `/context`, `/compact` or `/code-review` as soon as you pick them. Fixed: answers from commands like `/context`, `/mcp` and `/usage` never showed up.
