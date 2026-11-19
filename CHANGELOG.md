@@ -4,6 +4,8 @@ All notable changes to Spindle Make. `npm run release` moves the **Unreleased** 
 
 ## Unreleased
 
+## v0.1.5 — 2026-11-19
+
 - **New changes are ready in seconds**: setup no longer installs everything from scratch. When a change's lockfile matches what's already installed (in the main checkout or an earlier change), `vendor/` and `node_modules/` are cloned copy-on-write in a fraction of a second, without using extra disk space. Identical builds are reused too, and the database, PHP packages and JavaScript packages are prepared at the same time. On the demo project: about 12s before, 0.7s now.
 - **Faster database copies**: SQLite files are cloned instantly, Postgres copies on the server when it can, and MySQL restores skip per-row checks.
 - **Resizable panes**: drag the edge of the sidebar, the side panel or the live preview (or focus it and use the arrow keys; double-click resets). Widths are remembered.
