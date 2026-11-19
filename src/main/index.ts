@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 import { existsSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Api, Events } from '@shared/types'
@@ -37,6 +37,13 @@ function emit<K extends keyof Events>(channel: K, payload: Events[K]): void {
   for (const w of BrowserWindow.getAllWindows()) w.webContents.send(`evt:${channel}`, payload)
 }
 
+/** Light/dark: native chrome (menus, scrollbars, dialogs) follows the same choice as the page. */
+function applyTheme(theme: 'system' | 'light' | 'dark' | undefined): void {
+  nativeTheme.themeSource = theme ?? 'system'
+  for (const w of BrowserWindow.getAllWindows()) w.setBackgroundColor(windowBackground())
+}
+const windowBackground = () => (nativeTheme.shouldUseDarkColors ? '#0e0e10' : '#ffffff')
+
 const factory = new Factory(emit)
 const updater = new Updater({
   currentVersion: app.getVersion(),
@@ -63,7 +70,11 @@ const repoOf = (projectId: string) => {
 const handlers: Handlers = {
   // app
   getSettings: async () => store().getSettings(),
-  saveSettings: async (patch) => store().saveSettings(patch),
+  saveSettings: async (patch) => {
+    const next = store().saveSettings(patch)
+    if (patch.theme) applyTheme(next.theme)
+    return next
+  },
   setSecret: async (key, value) => store().setSecret(key, value),
   checkTools: () => factory.checkTools(),
   updateState: async () => updater.get(),
@@ -244,9 +255,14 @@ const handlers: Handlers = {
   webServerStatus: () => factory.webServerStatus(),
   trustCertificates: () => factory.trustCertificates(),
   mainSite: (projectId) => factory.mainSite(projectId),
+  authUsers: (target, query) => factory.authUsers(target, query),
+  loginAs: (target, userId, partition, url) => factory.loginAs(target, userId, partition, url),
+  logoutPreview: (partition, url) => factory.logoutPreview(partition, url),
+  harness: async (projectId, agent) => factory.harness(projectId, agent),
   devEnv: async (projectId, featureId) => factory.devEnv(projectId, featureId),
   saveDevEnv: async (projectId, config, instructions, baseHash) => factory.saveDevEnv(projectId, config, instructions, baseHash),
   detectDevEnv: async (projectId) => factory.detectDevEnv(projectId),
+  aiDetectDevEnv: (projectId) => factory.aiDetectDevEnv(projectId),
   trustDevEnv: async (projectId, featureId) => factory.trustDevEnv(projectId, featureId),
   stopProcess: (id) => factory.processes.stop(id),
   restartProcess: async (id) => (await factory.processes.restart(id)).id,
@@ -273,7 +289,7 @@ function createWindow(): void {
     show: false,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 14 },
-    backgroundColor: '#11130f',
+    backgroundColor: windowBackground(),
     title: 'Spindle / Make',
     vibrancy: 'under-window',
     webPreferences: {
@@ -402,6 +418,7 @@ function buildMenu(): void {
 }
 
 app.whenReady().then(() => {
+  applyTheme(store().getSettings().theme)
   buildMenu()
   createWindow()
   // Old builds kept tokens in safeStorage; move them to the Keychain without blocking startup.

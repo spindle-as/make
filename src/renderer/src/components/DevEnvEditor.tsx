@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { AlertTriangle, ArrowDown, ArrowUp, Database, FileCode2, Plus, RotateCcw, ShieldCheck, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, Database, FileCode2, Lightbulb, Plus, RotateCcw, ShieldCheck, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react'
 import type { DbDriver, DbMode, DbService, DevEnvironment, DevEnvView, Project, RuntimeMatch, ServiceDef } from '@shared/types'
 import { act, useStore } from '../store'
@@ -200,12 +200,20 @@ function DatabaseSection({ project, value, onChange }: { project: Project; value
           />
           <p className="text-xs text-faint">
             {value.mode === 'clone' && `Each change gets its own ${info.driver === 'sqlite' ? 'SQLite file' : `database (e.g. ${project.slug}_my_change)`} with a copy of your data.`}
-            {value.mode === 'empty' && 'Each change gets an empty database that is migrated (and seeded, if you have a DatabaseSeeder).'}
+            {value.mode === 'empty' && 'Each change gets an empty database that is migrated and (if turned on below) filled with sample data.'}
             {value.mode === 'shared' && 'All changes use the same database as the main checkout.'}
             {value.mode !== 'shared' && ' It is dropped automatically when the change is cleaned up.'}
           </p>
           {value.mode !== 'shared' && project.isLaravel && (
             <Toggle checked={value.migrate} onChange={(migrate) => onChange({ ...value, migrate })} label="Run migrations after creating the database" />
+          )}
+          {value.mode === 'empty' && project.isLaravel && (
+            <Toggle
+              checked={value.seed ?? true}
+              onChange={(seed) => onChange({ ...value, seed })}
+              label="Fill new databases with sample data"
+              hint="Runs the seeders (DatabaseSeeder) right after the migrations — handy test users and content."
+            />
           )}
         </>
       )}
@@ -214,25 +222,34 @@ function DatabaseSection({ project, value, onChange }: { project: Project; value
 }
 
 /** Banner for a .spindle file whose commands haven't been approved on this Mac. */
-export function TrustBanner({ view, onTrust, action = 'Approve these commands' }: { view: DevEnvView; onTrust: () => void; action?: string }) {
+export function TrustBanner({ view, onTrust, action = 'Approve these commands', simple }: { view: DevEnvView; onTrust: () => void; action?: string; simple?: boolean }) {
+  const [show, setShow] = useState(!simple)
   if (view.trusted) return null
   return (
     <div className="rounded-xl border border-warn/40 bg-warn/10 p-4">
       <div className="flex items-start gap-3">
         <ShieldCheck className="mt-0.5 size-5 shrink-0 text-warn" />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium">Review before Spindle runs these</div>
+          <div className="text-sm font-medium">{simple ? 'Your team set up how this project runs' : 'Review before Spindle runs these'}</div>
           <p className="mt-0.5 text-xs text-muted">
-            .spindle/config.json came from the repository (or changed since you last approved it). Spindle won’t run its setup steps, auto-start its processes or apply its
-            .env values until you approve them.
+            {simple
+              ? 'Spindle needs your OK once before it follows their setup. Only allow it if you trust this project.'
+              : '.spindle/config.json came from the repository (or changed since you last approved it). Spindle won’t run its setup steps, auto-start its processes or apply its .env values until you approve them.'}
           </p>
-          <ul className="mt-2 flex max-h-48 flex-col gap-0.5 overflow-y-auto rounded-lg bg-bg/60 p-2 font-mono text-xs">
-            {view.commands.map((c, i) => (
-              <li key={i} className="break-all">
-                {c}
-              </li>
-            ))}
-          </ul>
+          {simple && (
+            <button type="button" onClick={() => setShow(!show)} className="mt-1.5 block text-xs text-faint hover:text-fg">
+              {show ? 'Hide what it runs' : 'What will it run?'}
+            </button>
+          )}
+          {show && (
+            <ul className="mt-2 flex max-h-48 flex-col gap-0.5 overflow-y-auto rounded-lg bg-bg/60 p-2 font-mono text-xs">
+              {view.commands.map((c, i) => (
+                <li key={i} className="break-all">
+                  {c}
+                </li>
+              ))}
+            </ul>
+          )}
           <Button size="sm" variant="primary" className="mt-3" onClick={onTrust}>
             {action}
           </Button>
@@ -252,6 +269,7 @@ export function DevEnvEditor({ project, onSaveState, flushRef }: { project: Proj
   const [cfg, setCfg] = useState<DevEnvironment | null>(null)
   const [notes, setNotes] = useState('')
   const [envKey, setEnvKey] = useState(0)
+  const [aiBusy, setAiBusy] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // The file version this editor shows; saving over a newer one (a pull, a hand edit) is refused.
   const baseHash = useRef<string | undefined>(undefined)
@@ -307,14 +325,88 @@ export function DevEnvEditor({ project, onSaveState, flushRef }: { project: Proj
   if (!view || !cfg)
     return (
       <div className="flex items-center gap-2 text-sm text-muted">
-        <Spinner /> Reading .spindle…
+        <Spinner /> {creator ? 'Loading…' : 'Reading .spindle…'}
       </div>
     )
+
+  // Creator mode: what it means, not how it works. Developer mode has every knob.
+  if (creator) {
+    const dataMode = cfg.database.mode === 'empty' ? 'sample' : cfg.database.mode === 'shared' ? 'shared' : 'copy'
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="flex items-start gap-3 rounded-xl border border-line bg-raised/40 px-4 py-3.5">
+          <Sparkles className="mt-0.5 size-5 shrink-0 text-muted" />
+          <div className="text-sm">
+            <div className="font-medium">Spindle sets this up for you</div>
+            <p className="mt-0.5 text-muted">Every change gets its own copy of the app — its own website, data and email inbox — so nothing you try affects the real thing.</p>
+          </div>
+        </div>
+        <TrustBanner
+          simple
+          view={view}
+          action="Allow and continue"
+          onTrust={async () => {
+            const v = await act(() => window.api.trustDevEnv(project.id), 'Allowed')
+            if (v) {
+              baseHash.current = v.hash
+              setView(v)
+            }
+          }}
+        />
+        <Group title="Tips for Claude about this project" hint="Anything that helps: test logins, words your team uses, things it should never change.">
+          <Textarea
+            rows={4}
+            value={notes}
+            onChange={(e) => {
+              setNotes(e.target.value)
+              schedule()
+            }}
+            placeholder={'Log in as admin@example.com / password.\nWe call customers “members”.\nNever change the invoice layout.'}
+            className="text-sm"
+          />
+        </Group>
+        <Group title="Data for each change">
+          <Segmented<'copy' | 'sample' | 'shared'>
+            value={dataMode}
+            onChange={(m) =>
+              set('database', m === 'copy' ? { ...cfg.database, mode: 'clone', migrate: true } : m === 'sample' ? { ...cfg.database, mode: 'empty', migrate: true, seed: true } : { ...cfg.database, mode: 'shared' })
+            }
+            options={[
+              { value: 'copy', label: 'A copy of my data' },
+              { value: 'sample', label: 'Fresh sample data' },
+              { value: 'shared', label: 'Share my data' }
+            ]}
+          />
+          <p className="mt-1.5 text-xs text-faint">
+            {dataMode === 'copy' && 'Each change starts with a copy of your current data. Changes to it stay in that copy.'}
+            {dataMode === 'sample' && 'Each change starts with clean sample data — handy for trying things from scratch.'}
+            {dataMode === 'shared' && 'Every change uses the same data as your main version. Faster, but changes affect each other.'}
+          </p>
+        </Group>
+        <Group title="Email">
+          <Toggle checked={cfg.mail.capture} onChange={(capture) => set('mail', { capture })} label="Keep emails inside Spindle" hint="Emails the app sends show up in the Email tab instead of reaching real people." />
+        </Group>
+        <p className="text-xs text-faint">
+          Need more control (versions, processes, setup steps)?{' '}
+          <button
+            type="button"
+            className="text-info hover:underline"
+            onClick={async () => {
+              const next = await act(() => window.api.saveSettings({ mode: 'developer' }))
+              if (next) useStore.getState().setSettings(next)
+            }}
+          >
+            Switch to Developer mode
+          </button>
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3 rounded-xl border border-line bg-raised/40 px-4 py-3">
-        <FileCode2 className="size-5 shrink-0 text-accent-strong" />
+        <FileCode2 className="size-5 shrink-0 text-fg" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-sm font-medium">
             <span className="font-mono">.spindle/config.json</span>
@@ -335,6 +427,35 @@ export function DevEnvEditor({ project, onSaveState, flushRef }: { project: Proj
             Save to .spindle
           </Button>
         )}
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<Sparkles className="size-4" />}
+          loading={aiBusy}
+          title="Let Claude read the project (read-only) and propose how it runs — you review it before anything changes"
+          onClick={async () => {
+            setAiBusy(true)
+            const r = await act(() => window.api.aiDetectDevEnv(project.id))
+            setAiBusy(false)
+            if (!r) return
+            const summary = [
+              r.notes,
+              '',
+              `Setup: ${r.config.setup.join(' → ') || '—'}`,
+              `After the database: ${(r.config.prepare ?? []).join(' → ') || '—'}`,
+              `Migrate: ${r.config.database.migrate ? 'yes' : 'no'} · Sample data: ${r.config.database.seed ? 'yes' : 'no'}`,
+              `Processes: ${r.config.processes.map((x) => x.name).join(', ') || '—'}`,
+              '',
+              'Use this setup?'
+            ].join('\n')
+            if (!confirm(summary)) return
+            setCfg(r.config)
+            setEnvKey((k) => k + 1)
+            schedule()
+          }}
+        >
+          Detect with AI
+        </Button>
         {!creator && (
           <IconButton
             title="Detect again from the project"
@@ -424,9 +545,47 @@ export function DevEnvEditor({ project, onSaveState, flushRef }: { project: Proj
       </Group>
 
       {!creator && (
-        <Group title="Setup steps" hint="Run in order in every new change’s workspace, after .env and the database are ready. Stops at the first failure. Env: $SF_MAIN_REPO $SF_WORKTREE $SF_BRANCH $SF_URL">
-          <CommandList value={cfg.setup} onChange={(v) => set('setup', v)} placeholder="composer install" ordered addLabel="Add step" />
-        </Group>
+        <>
+          <Group title="Setup steps" hint="Install and build, in order, in every new change’s workspace. Stops at the first failure. Env: $SF_MAIN_REPO $SF_WORKTREE $SF_BRANCH $SF_URL">
+            <CommandList value={cfg.setup} onChange={(v) => set('setup', v)} placeholder="composer install" ordered addLabel="Add step" />
+          </Group>
+          <Group title="After the database is ready" hint="Runs once the database exists and is migrated (and seeded) — e.g. php artisan storage:link, package keys, a specific seeder.">
+            <CommandList value={cfg.prepare ?? []} onChange={(v) => set('prepare', v)} placeholder="php artisan storage:link" ordered addLabel="Add step" />
+          </Group>
+        </>
+      )}
+
+      {(view.reasons.length > 0 || view.suggestions.length > 0) && (
+        <div className="flex flex-col gap-2 rounded-xl border border-line bg-raised/40 px-4 py-3">
+          {view.reasons.length > 0 && (
+            <ul className="flex flex-col gap-0.5 text-xs text-muted">
+              {view.reasons.map((r) => (
+                <li key={r}>· {r}</li>
+              ))}
+            </ul>
+          )}
+          {view.suggestions.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-fg">
+                <Lightbulb className="size-3.5 text-warn" /> Found in the project — add the ones it needs:
+              </div>
+              {view.suggestions
+                .filter((x) => !cfg.setup.includes(x.command) && !(cfg.prepare ?? []).includes(x.command))
+                .map((x) => (
+                  <div key={x.command} className="flex items-center gap-2 text-xs">
+                    <code className="min-w-0 flex-1 truncate font-mono text-fg/90">{x.command}</code>
+                    <span className="shrink-0 text-faint">{x.source}</span>
+                    <Button size="sm" variant="ghost" className="h-7" onClick={() => set('setup', [...cfg.setup, x.command])}>
+                      + setup
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7" onClick={() => set('prepare', [...(cfg.prepare ?? []), x.command])}>
+                      + after database
+                    </Button>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
       )}
 
       <Group title="Database">

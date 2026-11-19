@@ -64,7 +64,7 @@ function NightwatchView({ feature, project, env }: { feature: Feature; project: 
     <div className="flex h-full flex-col">
       <div className="border-b border-line p-3 text-xs text-muted">
         <div className="mb-2 flex items-center gap-2">
-          <Activity className="size-4 text-accent-strong" />
+          <Activity className="size-4 text-fg" />
           <span className="text-sm font-medium text-fg">Laravel Nightwatch</span>
           {mcp === null ? <Spinner /> : installed ? <Badge tone="ok">MCP connected</Badge> : <Badge tone="warn">MCP not set up</Badge>}
         </div>

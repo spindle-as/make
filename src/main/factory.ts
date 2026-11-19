@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Notification, shell as eShell } from 'electron'
+import { app, BrowserWindow, Notification, session as eSession, shell as eShell } from 'electron'
 import { spawn } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
@@ -10,7 +10,11 @@ import type {
   DeployState,
   DevEnvironment,
   DevEnvView,
+  AuthTarget,
+  HarnessInfo,
+  HarnessView,
   MainSiteState,
+  PermissionDecision,
   Attachment,
   CheckResult,
   Events,
@@ -45,6 +49,9 @@ import { catalog } from './models'
 import { DeployTracker } from './deploy'
 import { detectServices, ProcessManager } from './processes'
 import * as devenv from './devenv'
+import { AUTH_SCRIPT, runAuthScript, type AuthUser } from './laravelAuth'
+import { expandCodexPrompt, harnessView } from './harness'
+import { detectSetup, seederDoesSomething, setupContextFiles } from './detect'
 import { listNode, listPhp, pick as pickRuntime, resolveRuntime, type ResolvedRuntime } from './runtimes'
 import { environmentFromSite, PloiClient, scoreSites } from './ploi'
 import { store } from './store'
@@ -60,7 +67,7 @@ export const DEFAULT_LARAVEL_SETUP = `# Runs inside every new worktree (cwd = wo
 set -e
 if [ -f composer.json ]; then composer install --no-interaction --prefer-dist --no-progress; fi
 if [ -f package.json ]; then
-  if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+  if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund --no-package-lock; fi
   npm run build
 fi
 `
@@ -143,6 +150,17 @@ export class Factory {
       onCost: (featureId, cost) => {
         const f = store().feature(featureId)
         this.saveFeature({ ...f, costUsd: (f.costUsd ?? 0) + cost })
+      },
+      // Claude Code reports what it loaded (commands, skills, subagents, MCP) at the start of every turn.
+      onInit: (featureId, init) => {
+        const f = store().feature(featureId)
+        if (!f.projectId) {
+          this.globalHarness = { ...init, updatedAt: Date.now() }
+          this.emit('harness:changed', { projectId: '' })
+          return
+        }
+        this.updateProject(f.projectId, { harness: { ...init, updatedAt: Date.now() } })
+        this.emit('harness:changed', { projectId: f.projectId })
       },
       onFinished: (featureId, ok) => {
         let f: Feature
@@ -352,6 +370,7 @@ export class Factory {
   async startWebServer(): Promise<void> {
     try {
       writeFileSync(this.routerFile(), PHP_ROUTER)
+      writeFileSync(this.authScript(), AUTH_SCRIPT)
       await this.web.start()
       // Changes previewed with the old `artisan serve` fallback move onto HTTPS domains.
       for (const f of store().features()) {
@@ -379,6 +398,55 @@ export class Factory {
     } catch (e) {
       this.webError = (e as Error).message
     }
+  }
+
+  private authScript(): string {
+    return join(app.getPath('userData'), 'spindle-auth.php')
+  }
+
+  /** The app a "log in as" acts on, with the env (pinned PHP) to run it in. */
+  private authContext(target: AuthTarget): { root: string; env: Record<string, string> } {
+    const f = 'featureId' in target ? store().feature(target.featureId) : null
+    const p = store().project(f ? f.projectId! : (target as { projectId: string }).projectId)
+    const root = f && !f.inPlace && existsSync(f.worktreePath) ? f.worktreePath : p.path
+    if (!existsSync(join(root, 'artisan'))) throw new Error('“Log in as” works for Laravel apps.')
+    if (!existsSync(this.authScript())) writeFileSync(this.authScript(), AUTH_SCRIPT)
+    return { root, env: this.execEnv(this.runnable(p, f)) }
+  }
+
+  async authUsers(target: AuthTarget, query = ''): Promise<{ total: number; users: AuthUser[] }> {
+    const { root, env } = this.authContext(target)
+    return runAuthScript(this.authScript(), root, ['list', query], env)
+  }
+
+  /** Start a real Laravel session for the user and hand its cookie to the preview's cookie jar. */
+  async loginAs(target: AuthTarget, userId: string, partition: string, url: string) {
+    const { root, env } = this.authContext(target)
+    const r = await runAuthScript<{ cookie: { name: string; value: string; path: string; httpOnly: boolean; sameSite: string; lifetimeMinutes: number }; user: { id: string; name: string | null; email: string | null }; home: string }>(
+      this.authScript(),
+      root,
+      ['login', userId],
+      env
+    )
+    const origin = new URL(url).origin
+    const jar = eSession.fromPartition(partition).cookies
+    await jar.set({
+      url: origin + '/',
+      name: r.cookie.name,
+      value: r.cookie.value,
+      path: r.cookie.path,
+      httpOnly: r.cookie.httpOnly,
+      secure: origin.startsWith('https:'),
+      sameSite: r.cookie.sameSite === 'strict' ? 'strict' : r.cookie.sameSite === 'none' ? 'no_restriction' : 'lax',
+      expirationDate: Math.floor(Date.now() / 1000) + r.cookie.lifetimeMinutes * 60
+    })
+    return { home: r.home, user: r.user }
+  }
+
+  async logoutPreview(partition: string, url: string): Promise<void> {
+    const origin = new URL(url).origin
+    const jar = eSession.fromPartition(partition).cookies
+    for (const c of await jar.get({ url: origin + '/' })) await jar.remove(origin + '/', c.name)
   }
 
   private routerFile(): string {
@@ -547,7 +615,7 @@ export class Factory {
     const state = p.setup && p.setup.status !== 'done' ? p.setup : freshSetup()
     this.syncEnvMirror(projectId)
     const r = this.runnable(store().project(projectId))
-    await runProjectSetup(p, state, { mailPort: this.mail.port, capture: r.config.mail.capture, env: this.execEnv(r), php: r.runtime.php?.version, site: () => this.registerProjectSite(projectId) }, (setup, patch) => {
+    await runProjectSetup(p, state, { mailPort: this.mail.port, capture: r.config.mail.capture, env: this.execEnv(r), php: r.runtime.php?.version, prepare: r.config.prepare, seed: r.config.database.seed, site: () => this.registerProjectSite(projectId) }, (setup, patch) => {
       this.updateProject(projectId, { setup: { ...setup, steps: setup.steps.map((x) => ({ ...x })) }, ...(patch ?? {}) })
     })
   }
@@ -973,6 +1041,13 @@ export class Factory {
           log(`✗ Database: ${(e as Error).message}`)
           step(`✗ Database: ${(e as Error).message}`)
         }
+      } else if (!f.inPlace && dbMode === 'shared') {
+        // Sharing SQLite means using the main checkout's file — the worktree has none of its own.
+        const shared = db.shareSqlite(p.path, f.worktreePath)
+        if (shared) {
+          log(`✓ Uses the main SQLite database at ${shared}`)
+          step('✓ Shares the main database')
+        }
       }
       // 4. Setup steps from .spindle/config.json (composer install, npm ci, …), one at a time
       if (!f.inPlace) {
@@ -1008,7 +1083,8 @@ export class Factory {
       const fd = store().feature(featureId).database
       if (ok && fd && r.trusted && p.isLaravel && r.config.database.migrate && existsSync(join(f.worktreePath, 'artisan'))) {
         card('running', 'Running migrations')
-        const seed = r.config.database.mode === 'empty' && existsSync(join(f.worktreePath, 'database', 'seeders', 'DatabaseSeeder.php'))
+        // A brand-new database gets sample data when the seeders do something (or the config says so).
+        const seed = r.config.database.mode === 'empty' && (r.config.database.seed ?? seederDoesSomething(f.worktreePath))
         const m = await exec('php', ['artisan', 'migrate', '--force', ...(seed ? ['--seed'] : [])], {
           cwd: f.worktreePath,
           env: runEnv,
@@ -1016,6 +1092,15 @@ export class Factory {
         })
         log(m.stdout + m.stderr)
         step(m.code === 0 ? `✓ Migrations ran${seed ? ' and database seeded' : ''}` : '✗ Migrations failed — see the Setup tab')
+      }
+      // 6. After the database is ready: storage link, package keys, custom seeders…
+      if (ok && r.trusted && !f.inPlace && r.config.prepare?.length) {
+        for (const cmd of r.config.prepare) {
+          log(`$ ${cmd}`)
+          card('running', devenv.setupLabel(cmd))
+          const code = await this.streamSetupCommand(featureId, cmd, f.worktreePath, { ...runEnv, SF_WORKTREE: f.worktreePath, SF_MAIN_REPO: p.path })
+          step(code === 0 ? `✓ ${devenv.setupLabel(cmd, true)}` : `✗ ${devenv.setupLabel(cmd)} failed (exit ${code}) — see the Setup tab`)
+        }
       }
     } catch (e) {
       ok = false
@@ -1113,6 +1198,14 @@ export class Factory {
 
   // ---------------- agent ----------------
 
+  /** Slash commands, subagents, skills and MCP servers for the composer's menus. */
+  harness(projectId: string | null, agent: AgentKind): HarnessView {
+    const p = projectId ? store().project(projectId) : null
+    return harnessView(agent, p?.path ?? null, p ? p.harness : this.globalHarness)
+  }
+
+  private globalHarness?: HarnessInfo
+
   sendPrompt(featureId: string, prompt: string, attachments: Attachment[] = []): void {
     // While Claude is working, a new message joins the running turn instead of failing.
     if (this.agents.isRunning(featureId)) {
@@ -1128,11 +1221,13 @@ export class Factory {
     return this.agents.pending()
   }
 
-  respondPermission(featureId: string, requestId: string, decision: 'allow' | 'allow-always' | 'deny', message?: string): void {
+  respondPermission(featureId: string, requestId: string, decision: PermissionDecision, message?: string): void {
     const req = this.agents.pending().find((r) => r.id === requestId)
     this.agents.respondPermission(featureId, requestId, decision, message)
+    // An approved plan switches the session to auto-edit (Claude Code does the same via setMode).
+    if (decision === 'approve-plan') this.saveFeature({ ...store().feature(featureId), permissionMode: 'acceptEdits' })
     if (req) {
-      const verb = decision === 'deny' ? 'Declined' : decision === 'allow-always' ? 'Always allowed' : 'Allowed'
+      const verb = decision === 'deny' ? 'Declined' : decision === 'allow-always' ? 'Always allowed' : decision === 'approve-plan' ? 'Plan approved — building it' : 'Allowed'
       this.addSystemItem(featureId, `${verb}: ${req.title}${message ? ` — “${truncate(message, 120)}”` : ''}`)
     }
   }
@@ -1258,7 +1353,7 @@ export class Factory {
     const e = this.envOf(p, f)
     const config: DevEnvironment = e.trusted
       ? e.config
-      : { ...e.config, setup: [], processes: e.config.processes.map((x) => ({ ...x, autoStart: false })), site: { docroot: e.config.site.docroot }, env: {} }
+      : { ...e.config, setup: [], prepare: [], processes: e.config.processes.map((x) => ({ ...x, autoStart: false })), site: { docroot: e.config.site.docroot }, env: {} }
     const runtime: ResolvedRuntime = resolveRuntime(config.runtime, this.runtimeRoot())
     return { ...e, config, runtime, missing: runtime.missing, pending: e.trusted ? [] : devenv.autoRunCommands(e.config) }
   }
@@ -1327,6 +1422,7 @@ export class Factory {
       },
       installed: { php, node },
       hints: devenv.runtimeHints(e.root),
+      ...(({ suggestions, reasons }) => ({ suggestions: suggestions.filter((x) => ![...e.config.setup, ...(e.config.prepare ?? [])].includes(x.command)), reasons }))(detectSetup(e.root)),
       warnings: this.runtimeWarnings(e.config, e.root)
     }
   }
@@ -1343,6 +1439,64 @@ export class Factory {
     const hash = this.envOf(p).hash
     this.updateProject(projectId, { trustedEnvHashes: [...new Set([...(p.trustedEnvHashes ?? []), hash])].slice(-20) })
     return this.devEnv(projectId)
+  }
+
+  /**
+   * Let Claude read the project (read-only: plan mode, no shell, no edits) and propose how it runs.
+   * The result is a proposal for the user to review in the editor — nothing is saved or run here.
+   */
+  async aiDetectDevEnv(projectId: string): Promise<{ config: DevEnvironment; notes: string }> {
+    const p = store().project(projectId)
+    const current = this.envOf(p).config
+    const s = store().getSettings()
+    const prompt = [
+      'Work out how this project runs in local development. Read whatever helps — start with: ' + setupContextFiles(p.path).join(', ') + '.',
+      'Use only read tools. Do not run commands or change files.',
+      'Then reply with ONLY a JSON object (no prose, no code fence) shaped like:',
+      '{"setup": string[], "prepare": string[], "migrate": boolean, "seed": boolean, "processes": [{"name": string, "command": string, "autoStart": boolean}], "commands": string[], "runtime": {"php"?: string, "node"?: string}, "env": {[key: string]: string}, "notes": string}',
+      'setup = install/build commands for a fresh checkout, in order (never servers or watchers).',
+      'prepare = commands to run after the database exists and is migrated (e.g. php artisan storage:link, key generation for packages, specific seeders).',
+      'migrate/seed = whether a new database should be migrated / seeded with sample data.',
+      'processes = long-running dev processes (asset dev server, queue worker, scheduler…), autoStart for the ones a developer always needs.',
+      'commands = handy one-off commands (tests, linters, cache clearing).',
+      'env = only non-secret .env values local development needs that differ from .env.example.',
+      'Never include commands that copy .env or generate the APP_KEY — Spindle handles those. Never include secrets.',
+      'notes = 2–4 plain sentences on what you found and why.'
+    ].join('\n')
+    const r = await exec(
+      s.claudePath || 'claude',
+      ['-p', '--output-format', 'json', '--model', s.claudeModel || 'sonnet', '--permission-mode', 'plan', '--allowedTools', 'Read,Glob,Grep,LS', '--disallowedTools', 'Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch'],
+      { cwd: p.path, input: prompt, timeoutMs: 5 * 60_000 }
+    )
+    if (r.code !== 0) throw new Error(`Claude couldn’t analyse the project: ${(r.stderr || r.stdout).trim().split('\n').slice(-2).join(' ')}`)
+    let text = r.stdout
+    try {
+      text = (JSON.parse(r.stdout) as { result?: string }).result ?? r.stdout
+    } catch {
+      /* plain text */
+    }
+    const raw = text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)
+    let found: Record<string, any>
+    try {
+      found = JSON.parse(raw)
+    } catch {
+      throw new Error('Claude’s answer wasn’t valid JSON — try again.')
+    }
+    const strs = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && !!x.trim()) : undefined)
+    const config: DevEnvironment = devenv.normalize(
+      {
+        ...current,
+        setup: strs(found.setup) ?? current.setup,
+        prepare: strs(found.prepare) ?? current.prepare,
+        processes: Array.isArray(found.processes) ? found.processes : current.processes,
+        commands: strs(found.commands) ?? current.commands,
+        runtime: { ...current.runtime, ...(found.runtime && typeof found.runtime === 'object' ? found.runtime : {}) },
+        env: { ...current.env, ...(found.env && typeof found.env === 'object' ? found.env : {}) },
+        database: { ...current.database, migrate: typeof found.migrate === 'boolean' ? found.migrate : current.database.migrate, seed: typeof found.seed === 'boolean' ? found.seed : current.database.seed }
+      },
+      current
+    )
+    return { config, notes: typeof found.notes === 'string' ? found.notes : '' }
   }
 
   detectDevEnv(projectId: string): DevEnvironment {
@@ -1465,6 +1619,8 @@ export class Factory {
     this.saveFeature(next)
     const r = p ? this.runnable(p, f) : null
     const mailNote = p && r?.config.mail.capture && this.mail.port ? `Outgoing email from this app is captured locally by Spindle (SMTP 127.0.0.1:${this.mail.port}); it is never delivered to real people.` : ''
+    // Codex doesn't expand its custom prompts in exec mode; do it here so /name works the same.
+    if (next.agent === 'codex') prompt = expandCodexPrompt(prompt)
     this.agents.start(p, next, store().getSettings(), prompt, [this.processes.describeFor(featureId), mailNote, r ? this.envNote(r) : ''].filter(Boolean).join('\n'), {
       disallowedTools: this.agentRestrictions(p),
       attachments,

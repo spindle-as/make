@@ -66,14 +66,14 @@ export function NewThread() {
   const showMain = isFeature && !!project && project.setup?.status !== 'running' && project.setup?.status !== 'failed'
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 min-w-0 flex-1">
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="drag h-12 shrink-0" />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className={clsx('mx-auto flex w-full flex-col gap-6 px-6 pb-12', showMain ? 'max-w-2xl pt-[5vh]' : 'max-w-3xl pt-[8vh]')}>
           <div className="flex flex-col items-center gap-3 text-center">
             <div className="flex size-12 items-center justify-center rounded-2xl border border-line-strong bg-raised">
-              {isFeature ? <Factory className="size-6 text-accent-strong" /> : <MessageSquare className="size-6 text-accent-strong" />}
+              {isFeature ? <Factory className="size-6 text-fg" /> : <MessageSquare className="size-6 text-fg" />}
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">{isFeature ? w.whatShouldWeBuild : 'What do you want to talk about?'}</h1>
             <p className="max-w-lg text-base text-muted">
@@ -106,6 +106,7 @@ export function NewThread() {
           {project && <ProjectSetupCard project={project} />}
 
           <Composer
+            projectId={draft.projectId}
             big
             cfg={cfg}
             onChange={(p) => setDraft(p)}
@@ -162,7 +163,7 @@ export function NewThread() {
               onClick={() => void runAction('add-project')}
               className="flex items-center gap-3 rounded-xl border border-dashed border-line-strong px-4 py-3 text-left text-sm text-muted hover:border-accent/50 hover:text-fg"
             >
-              <FolderPlus className="size-5 text-accent-strong" />
+              <FolderPlus className="size-5 text-fg" />
               <span className="flex-1">Open a project from GitHub, a folder on this Mac, or start a new Laravel app. Plain chats work without one.</span>
               <Kbd keys={shortcutFor('add-project')} />
             </button>
@@ -183,7 +184,7 @@ export function NewThread() {
                 }}
                 className="flex items-center gap-1.5 rounded-full border border-line bg-panel px-3.5 py-1.5 text-sm text-muted hover:border-line-strong hover:text-fg"
               >
-                <Sparkles className="size-3.5 text-accent-strong" />
+                <Sparkles className="size-3.5 text-fg" />
                 {idea}
               </button>
             ))}
@@ -221,7 +222,7 @@ export function NewThread() {
       </div>
     </div>
     {showMain && (
-      <div className="flex w-[52%] max-w-[980px] min-w-[420px] shrink-0 flex-col border-l border-line bg-panel">
+      <div className="flex w-[52%] max-w-[980px] min-w-[380px] shrink flex-col border-l border-line bg-panel">
         <div className="drag h-12 shrink-0 border-b border-line" />
         <div className="min-h-0 flex-1">
           <MainVersion key={project!.id} project={project!} agent={{ agent: draft.agent, model: draft.model, effort: draft.effort, permissionMode: draft.permissionMode, baseBranch: draft.baseBranch }} />

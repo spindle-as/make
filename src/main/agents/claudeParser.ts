@@ -4,6 +4,8 @@ import { truncate } from '@shared/util'
 export interface ParseOutput {
   items: ChatItem[] // upserts
   sessionId?: string
+  /** Claude Code's init event: what it has loaded for this session */
+  init?: { version?: string; model?: string; outputStyle?: string; slashCommands: string[]; agents: string[]; skills: string[]; mcpServers: { name: string; status: string }[]; plugins: string[] }
   done?: { costUsd?: number; error?: string }
 }
 
@@ -86,6 +88,28 @@ export class ClaudeStreamParser {
     }
     if (j.session_id) out.sessionId = j.session_id
     const now = Date.now()
+    // Items from inside a subagent carry the id of the Task/Agent call that spawned it.
+    const parentId: string | undefined = typeof j.parent_tool_use_id === 'string' && j.parent_tool_use_id ? j.parent_tool_use_id : undefined
+
+    if (j.type === 'system' && j.subtype === 'init') {
+      const strs = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+      out.init = {
+        version: j.claude_code_version,
+        model: j.model,
+        outputStyle: j.output_style,
+        slashCommands: strs(j.slash_commands).filter((c) => !c.startsWith('__')),
+        agents: strs(j.agents),
+        skills: strs(j.skills),
+        mcpServers: Array.isArray(j.mcp_servers) ? j.mcp_servers.map((m: { name: string; status: string }) => ({ name: String(m.name), status: String(m.status) })) : [],
+        plugins: Array.isArray(j.plugins) ? j.plugins.map((p: { name: string }) => String(p.name)) : []
+      }
+      return out
+    }
+    if (j.type === 'system' && j.subtype === 'compact_boundary') {
+      const pre = j.compact_metadata?.pre_tokens
+      out.items.push({ id: `compact-${j.uuid ?? now}`, role: 'system', text: `Context compacted${pre ? ` (was ${Math.round(pre / 1000)}k tokens)` : ''} — earlier messages were summarised`, ts: now })
+      return out
+    }
 
     if (j.type === 'stream_event' && j.event && !j.parent_tool_use_id) {
       const e = j.event
@@ -114,15 +138,16 @@ export class ClaudeStreamParser {
       const msgId = j.message.id || j.uuid || String(now)
       j.message.content.forEach((b: Record<string, any>) => {
         if (b.type === 'text' && b.text?.trim()) {
-          out.items.push({ id: this.finalId(msgId, 'text', b.text), role: 'assistant', text: b.text, ts: now })
+          out.items.push({ id: this.finalId(msgId, 'text', b.text), role: 'assistant', text: b.text, ts: now, ...(parentId ? { parentId } : {}) })
         } else if (b.type === 'thinking' && b.thinking?.trim()) {
-          out.items.push({ id: this.finalId(msgId, 'thinking', b.thinking), role: 'thinking', text: b.thinking, ts: now })
+          out.items.push({ id: this.finalId(msgId, 'thinking', b.thinking), role: 'thinking', text: b.thinking, ts: now, ...(parentId ? { parentId } : {}) })
         } else if (b.type === 'tool_use') {
           const item: ChatItem = {
             id: b.id,
             role: 'tool',
             text: '',
             ts: now,
+            ...(parentId ? { parentId } : {}),
             tool: {
               name: b.name,
               summary: truncate(summarizeTool(b.name, b.input), 300),

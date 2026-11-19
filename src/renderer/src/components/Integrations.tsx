@@ -60,7 +60,7 @@ function PloiConnect({ status, onDone }: { status: IntegrationStatus; onDone: ()
           Connect
         </Button>
       </div>
-      <button type="button" onClick={() => void window.api.openExternal('https://ploi.io/profile/api-keys')} className="flex items-center gap-1 self-start text-xs text-accent-strong hover:underline">
+      <button type="button" onClick={() => void window.api.openExternal('https://ploi.io/profile/api-keys')} className="flex items-center gap-1 self-start text-xs text-info hover:underline">
         Create a token at ploi.io (give it the servers & sites scopes) <ExternalLink className="size-3" />
       </button>
     </div>

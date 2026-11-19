@@ -19,24 +19,82 @@
   --text-xl: 19px;
   --text-2xl: 24px;
 
-  --color-bg: #11130f;
-  --color-panel: #161913;
-  --color-raised: #1c2018;
-  --color-hover: #242920;
-  --color-active: #2c3227;
-  --color-line: #2a3024;
-  --color-line-strong: #3d4535;
-  --color-fg: #eeeee7;
-  --color-muted: #a0a696;
-  --color-faint: #7d8474;
-  --color-accent: #c4ff48;
-  --color-accent-strong: #d4ff75;
-  --color-ok: #7fd858;
-  --color-warn: #f2c14e;
-  --color-bad: #ff7a66;
-  --color-info: #7cc4ff;
-  /* text on Spindle green */
-  --color-ink: #11130f;
+  /*
+   * Neutral graphite (dark) — overridden for light below. Colour only means something:
+   * info = working, warn = needs you, ok = done, bad = problem. Primary actions are monochrome.
+   */
+  --color-bg: #0e0e10;
+  --color-panel: #131316;
+  --color-raised: #1a1a1e;
+  --color-hover: #222227;
+  --color-active: #2a2a30;
+  --color-line: #242429;
+  --color-line-strong: #33333a;
+  --color-fg: #ededf0;
+  --color-muted: #a1a1aa;
+  --color-faint: #71717a;
+  --color-accent: #ededf0;
+  --color-accent-strong: #ffffff;
+  --color-ok: #4ade80;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+  --color-info: #60a5fa;
+  /* text on an accent (primary) surface */
+  --color-ink: #0e0e10;
+  --color-code: #18181c;
+  --color-code-block: #0b0b0d;
+  --color-scroll: #2c2c33;
+  --color-scroll-hover: #3d3d45;
+}
+
+/* Light theme: follows macOS unless a theme is picked in Settings → Appearance. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --color-bg: #ffffff;
+    --color-panel: #f8f8f9;
+    --color-raised: #f2f2f4;
+    --color-hover: #ebebee;
+    --color-active: #e3e3e7;
+    --color-line: #e7e7ea;
+    --color-line-strong: #d6d6db;
+    --color-fg: #17171a;
+    --color-muted: #55555f;
+    --color-faint: #8a8a94;
+    --color-accent: #17171a;
+    --color-accent-strong: #000000;
+    --color-ok: #16a34a;
+    --color-warn: #b45309;
+    --color-bad: #dc2626;
+    --color-info: #2563eb;
+    --color-ink: #ffffff;
+    --color-code: #f1f1f3;
+    --color-code-block: #f6f6f8;
+    --color-scroll: #d4d4d8;
+    --color-scroll-hover: #b8b8bf;
+  }
+}
+:root[data-theme='light'] {
+  --color-bg: #ffffff;
+  --color-panel: #f8f8f9;
+  --color-raised: #f2f2f4;
+  --color-hover: #ebebee;
+  --color-active: #e3e3e7;
+  --color-line: #e7e7ea;
+  --color-line-strong: #d6d6db;
+  --color-fg: #17171a;
+  --color-muted: #55555f;
+  --color-faint: #8a8a94;
+  --color-accent: #17171a;
+  --color-accent-strong: #000000;
+  --color-ok: #16a34a;
+  --color-warn: #b45309;
+  --color-bad: #dc2626;
+  --color-info: #2563eb;
+  --color-ink: #ffffff;
+  --color-code: #f1f1f3;
+  --color-code-block: #f6f6f8;
+  --color-scroll: #d4d4d8;
+  --color-scroll-hover: #b8b8bf;
 }
 
 html,
@@ -51,6 +109,10 @@ body,
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
   user-select: none;
+}
+/* Clip, not hide: an overflowing child must never be able to scroll the whole app sideways. */
+#root {
+  overflow: clip;
 }
 
 .drag {
@@ -74,13 +136,13 @@ input {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a2a31;
+  background: var(--color-scroll);
   border-radius: 10px;
   border: 3px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #3a3a43;
+  background-color: var(--color-scroll-hover);
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -124,13 +186,13 @@ input {
 .prose-chat code {
   font-family: var(--font-mono);
   font-size: 0.9em;
-  background: #1d1d23;
+  background: var(--color-code);
   border: 1px solid var(--color-line);
   padding: 0.05em 0.35em;
   border-radius: 5px;
 }
 .prose-chat pre {
-  background: #0e0e11;
+  background: var(--color-code-block);
   border: 1px solid var(--color-line);
   border-radius: 8px;
   padding: 10px 12px;
@@ -144,7 +206,7 @@ input {
   font-size: 13px;
 }
 .prose-chat a {
-  color: var(--color-accent-strong);
+  color: var(--color-info);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -235,4 +297,71 @@ select:focus-visible {
 .signature {
   font-family: var(--font-script);
   letter-spacing: 0;
+}
+
+/* ---- motion: quick, subtle, never in the way ---- */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise-in {
+  animation: rise-in 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+/* Text that sweeps while the agent works. */
+.shimmer-text {
+  background: linear-gradient(90deg, var(--color-muted) 0%, var(--color-fg) 45%, var(--color-muted) 70%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 2.2s linear infinite;
+}
+
+/* Pressable things give a little under the finger. */
+.press {
+  transition:
+    transform 120ms ease,
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    opacity 140ms ease;
+}
+.press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-info) 35%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Horizontal tab strips scroll without a visible bar. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

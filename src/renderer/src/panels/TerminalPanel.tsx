@@ -239,7 +239,7 @@ export function TerminalPanel({ feature, project }: { feature: Feature; project:
           void run(cmd)
         }}
       >
-        <span className="font-mono text-sm text-accent-strong">$</span>
+        <span className="font-mono text-sm text-fg">$</span>
         <input
           value={cmd}
           onChange={(e) => setCmd(e.target.value)}

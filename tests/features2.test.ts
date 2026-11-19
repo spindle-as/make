@@ -142,6 +142,7 @@ describe('per-feature databases', () => {
     writeFileSync(join(wt, '.env'), 'DB_CONNECTION=sqlite\n')
     const r = await provision(main, wt, 'x', 'empty', () => {})
     expect(r?.name).toBe(join(wt, 'database', 'database.sqlite'))
-    expect(readFileSync(join(wt, '.env'), 'utf8')).not.toContain('DB_DATABASE')
+    // Always absolute now: Laravel resolves relative paths against the current directory.
+    expect(readFileSync(join(wt, '.env'), 'utf8')).toContain(`DB_DATABASE=${join(wt, 'database', 'database.sqlite')}`)
   })
 })

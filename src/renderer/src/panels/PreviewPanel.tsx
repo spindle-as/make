@@ -66,6 +66,7 @@ export function PreviewPanel({ feature, project, active = true }: { feature: Fea
       notesKey={feature.id}
       url={feature.localUrl}
       partition={`persist:herd-${feature.herdSite ?? feature.slug}`}
+      auth={project.isLaravel ? { featureId: feature.id } : undefined}
       active={active}
       staleSignal={finishedTurns}
       intro="Please make these visual changes in the running app"
@@ -81,13 +82,13 @@ export function PreviewPanel({ feature, project, active = true }: { feature: Fea
       onFixErrors={(prompt) => void act(() => window.api.sendPrompt(feature.id, prompt), 'Sent to the AI')}
       banner={
         !tipHidden && (
-          <div className="flex items-center gap-3 border-b border-line bg-accent/[0.06] px-3 py-2 text-xs text-muted">
+          <div className="flex items-center gap-3 border-b border-line bg-raised/60 px-3 py-2 text-xs text-muted">
             <span className="shrink-0 font-semibold text-fg">How to test</span>
             <span className="min-w-0 truncate">
               <b className="text-fg">1</b> Click around like a user would · <b className="text-fg">2</b> Something off? Point at it, or tell the AI in the chat ·{' '}
               <b className="text-fg">3</b> Happy with it?
             </span>
-            <button type="button" onClick={() => useStore.getState().setRightTab('ship')} className="shrink-0 font-semibold text-accent-strong hover:underline">
+            <button type="button" onClick={() => useStore.getState().setRightTab('ship')} className="shrink-0 font-semibold text-info hover:underline">
               Check &amp; submit →
             </button>
             <div className="flex-1" />

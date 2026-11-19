@@ -52,7 +52,7 @@ export function SetupPanel({ feature }: { feature: Feature }) {
             <div className="flex-1" />
             <button
               type="button"
-              className="text-accent-strong hover:underline"
+              className="text-info hover:underline"
               onClick={() => useStore.getState().openModal({ kind: 'project', projectId: feature.projectId!, tab: 'environment' })}
             >
               Edit environment

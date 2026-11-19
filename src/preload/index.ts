@@ -40,7 +40,7 @@ const methods = [
   'deployStates', 'deployHistory', 'deploymentLog', 'listProcesses', 'processOutput', 'startService', 'stopProcess', 'restartProcess',
   'removeProcess', 'writeProcessInput', 'githubRepos', 'openGithubRepo', 'createLaravelProject', 'prepareProject', 'refreshAccess',
   'mailList', 'mailGet', 'mailClear', 'mailServerInfo', 'dbTables', 'dbRows', 'dbQuery', 'dbSnapshots', 'dbSnapshot', 'dbRestore', 'dbReset',
-  'checkChanges', 'cancelChecks', 'draftPr', 'addVisualNote', 'ensureServices', 'webServerStatus', 'trustCertificates', 'mainSite', 'devEnv', 'saveDevEnv', 'detectDevEnv', 'trustDevEnv'
+  'checkChanges', 'cancelChecks', 'draftPr', 'addVisualNote', 'ensureServices', 'webServerStatus', 'trustCertificates', 'mainSite', 'authUsers', 'loginAs', 'logoutPreview', 'harness', 'devEnv', 'saveDevEnv', 'detectDevEnv', 'aiDetectDevEnv', 'trustDevEnv'
 ] as const satisfies readonly (keyof Api)[]
 
 // Compile error here means a new Api method was not added to `methods`.

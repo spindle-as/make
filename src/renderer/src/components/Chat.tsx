@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import {
   AlertTriangle,
+  Bot,
   Brain,
   Check,
   ChevronRight,
@@ -15,7 +16,7 @@ import {
   Wrench,
   X
 } from 'lucide-react'
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { ChatItem, DevEnvView, Feature } from '@shared/types'
@@ -23,6 +24,8 @@ import { act, actOk, useStore } from '../store'
 import { Composer, type AgentConfig } from './Composer'
 import { TrustBanner } from './DevEnvEditor'
 import { TurnStatus } from './TurnStatus'
+import { useIsCreator } from '../lib/words'
+import { isPlanTool, planFrom, type PlanItem } from '../lib/todos'
 import { RequestCards } from './RequestCards'
 import { Empty, Spinner } from './ui'
 
@@ -55,7 +58,7 @@ const ToolRow = memo(function ToolRow({ item }: { item: ChatItem }) {
         <span className="shrink-0 font-medium text-fg">{t.name}</span>
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted">{t.summary}</span>
         {t.status === 'running' ? (
-          <Spinner className="text-accent-strong" />
+          <Spinner className="text-info" />
         ) : t.status === 'ok' ? (
           <Check className="size-4 text-ok" />
         ) : (
@@ -69,6 +72,89 @@ const ToolRow = memo(function ToolRow({ item }: { item: ChatItem }) {
             <pre className={clsx('max-h-80 overflow-auto rounded-lg bg-bg p-2.5 font-mono text-xs whitespace-pre-wrap', t.status === 'error' ? 'text-bad' : 'text-fg/90')}>
               {t.output}
             </pre>
+          )}
+        </div>
+      )}
+    </div>
+  )
+})
+
+/** The agent's plan as a live checklist. Older updates collapse to a line. */
+const TodoCard = memo(function TodoCard({ item, latest, todos }: { item: ChatItem; latest: boolean; todos: PlanItem[] }) {
+  const done = todos.filter((t) => t.status === 'completed').length
+  const [open, setOpen] = useState(latest)
+  useEffect(() => setOpen(latest), [latest])
+  if (!todos.length) return <ToolRow item={item} />
+  return (
+    <div className="rise-in rounded-xl border border-line bg-panel/70">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm">
+        <ListTodo className="size-4 text-muted" />
+        <span className="font-medium">{latest ? 'Plan' : 'Plan updated'}</span>
+        <div className="h-1.5 w-24 overflow-hidden rounded-full bg-hover">
+          <div className="h-full rounded-full bg-ok transition-[width] duration-500" style={{ width: `${(done / todos.length) * 100}%` }} />
+        </div>
+        <span className="text-xs text-faint tabular-nums">
+          {done}/{todos.length}
+        </span>
+        <div className="flex-1" />
+        <ChevronRight className={clsx('size-3.5 text-faint transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && (
+        <ul className="flex flex-col gap-1 border-t border-line px-3.5 py-2.5">
+          {todos.map((t, i) => (
+            <li key={i} className={clsx('flex items-start gap-2 text-sm', t.status === 'completed' ? 'text-faint line-through' : t.status === 'in_progress' ? 'text-fg' : 'text-muted')}>
+              <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+                {t.status === 'completed' ? <Check className="size-3.5 text-ok" /> : t.status === 'in_progress' ? <CircleDashed className="size-3.5 animate-spin text-info" /> : <span className="size-2.5 rounded-full border border-line-strong" />}
+              </span>
+              <span className={t.status === 'in_progress' ? 'shimmer-text font-medium' : ''}>{t.content}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+})
+
+/** A subagent (Task/Agent call) with its own steps nested inside, live. */
+const SubagentCard = memo(function SubagentCard({ item, steps }: { item: ChatItem; steps: ChatItem[] }) {
+  const [open, setOpen] = useState(false)
+  const t = item.tool!
+  let type = ''
+  try {
+    type = (JSON.parse(t.input ?? '{}') as { subagent_type?: string }).subagent_type ?? ''
+  } catch {
+    /* fine */
+  }
+  const tools = steps.filter((s) => s.role === 'tool')
+  const current = [...steps].reverse().find((s) => s.tool?.status === 'running')
+  return (
+    <div className={clsx('rise-in rounded-xl border bg-panel/70', t.status === 'running' ? 'border-info/30' : 'border-line')}>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm">
+        <ChevronRight className={clsx('size-3.5 shrink-0 text-faint transition-transform', open && 'rotate-90')} />
+        <Bot className="size-4 text-muted" />
+        <span className="shrink-0 font-medium">{type ? `${type} subagent` : 'Subagent'}</span>
+        <span className="min-w-0 flex-1 truncate text-xs text-muted">
+          {t.status === 'running' && current?.tool ? (
+            <>
+              <span className="shimmer-text">{current.tool.name}</span> <span className="font-mono">{current.tool.summary}</span>
+            </>
+          ) : (
+            t.summary
+          )}
+        </span>
+        <span className="shrink-0 text-2xs text-faint tabular-nums">
+          {tools.length} step{tools.length === 1 ? '' : 's'}
+        </span>
+        {t.status === 'running' ? <Spinner className="text-info" /> : t.status === 'ok' ? <Check className="size-4 text-ok" /> : <X className="size-4 text-bad" />}
+      </button>
+      {open && (
+        <div className="flex flex-col gap-2 border-t border-line px-3 py-2.5">
+          {steps.map((s) => (s.role === 'tool' ? <ToolRow key={s.id} item={s} /> : s.role === 'assistant' ? <div key={s.id} className="prose-chat text-sm text-muted">{md(s.text)}</div> : null))}
+          {t.output && t.status !== 'running' && (
+            <div className="rounded-lg bg-bg p-2.5">
+              <div className="mb-1 text-2xs font-semibold tracking-wider text-faint uppercase">Result</div>
+              <div className="prose-chat selectable text-sm">{md(t.output)}</div>
+            </div>
           )}
         </div>
       )}
@@ -90,18 +176,109 @@ const Thinking = memo(function Thinking({ item }: { item: ChatItem }) {
 })
 
 /** Live checklist (e.g. worktree setup). Lines starting with "…" are in progress. */
+/** Setup steps in words a creator understands (developers see the technical list). */
+export function friendlyStep(line: string): string {
+  const l = line.replace(/^[✓✗…!⚠]\s*/, '')
+  const map: [RegExp, string][] = [
+    [/^Creating worktree|Worktree ready|Working directly/i, 'your own copy of the project'],
+    [/Email is captured/i, 'emails stay inside Spindle'],
+    [/preview:|Local site/i, 'its own website'],
+    [/Cloning the database|Creating a database|Own database|Shares the main database|Database/i, 'its own data'],
+    [/PHP packages|JavaScript packages|Installing dependencies/i, 'installing what it needs'],
+    [/interface|assets/i, 'building the interface'],
+    [/migrations|sample data|seed/i, 'preparing the data'],
+    [/storage|Passport|keys/i, 'finishing touches'],
+    [/^Started|Starting/i, 'starting the app']
+  ]
+  return map.find(([re]) => re.test(l))?.[1] ?? l.toLowerCase()
+}
+
+/** Creator mode: one progress bar and plain words; the technical list sits behind "Details". */
+function CreatorSetupCard({ item, lines }: { item: ChatItem; lines: string[] }) {
+  const [open, setOpen] = useState(false)
+  const featureId = item.id.split('-')[1]
+  const feature = useStore((s) => s.features.find((f) => f.id === featureId))
+  const done = lines.filter((l) => l.startsWith('✓')).length
+  const current = lines.find((l) => l.startsWith('…'))
+  const failed = item.status === 'error'
+  const needsOk = lines.some((l) => l.includes('haven’t approved'))
+  const pct = item.status === 'ok' ? 100 : Math.min(92, Math.round((done / Math.max(7, done + 1)) * 100))
+  return (
+    <div className={clsx('rise-in rounded-xl border px-4 py-3.5', failed ? 'border-bad/30 bg-bad/5' : 'border-line bg-raised/40')}>
+      <div className="flex items-center gap-2.5">
+        {item.status === 'running' ? <Spinner className="text-info" /> : failed ? <AlertTriangle className="size-4 text-bad" /> : <Check className="size-4 text-ok" />}
+        <span className="text-sm font-medium">
+          {item.status === 'running' ? 'Getting your copy ready' : failed ? 'Something went wrong getting your copy ready' : needsOk ? 'Almost ready' : 'Your copy is ready'}
+        </span>
+        <div className="flex-1" />
+        <button type="button" onClick={() => setOpen(!open)} className="text-xs text-faint hover:text-fg">
+          {open ? 'Hide details' : 'Details'}
+        </button>
+      </div>
+      {!failed && (
+        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-hover">
+          <div className={clsx('h-full rounded-full transition-[width] duration-700', item.status === 'ok' ? 'bg-ok' : 'bg-info')} style={{ width: `${pct}%` }} />
+        </div>
+      )}
+      <p className="mt-2 text-sm text-muted">
+        {item.status === 'running'
+          ? `${current ? friendlyStep(current).replace(/^./, (c) => c.toUpperCase()) : 'Starting'}… This takes a minute the first time.`
+          : failed
+            ? 'Claude can usually fix this for you.'
+            : needsOk
+              ? 'One last step: allow your team’s setup below, and Spindle finishes getting your copy ready.'
+              : 'It has its own website, data and email inbox — nothing you do here affects the real thing. Try it, or describe what to build.'}
+      </p>
+      {failed && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              void actOk(() =>
+                window.api.sendPrompt(
+                  featureId,
+                  `Getting this change's workspace ready failed. Here is the end of the setup log:\n\n\`\`\`\n${(feature?.setupLog ?? '').slice(-4000)}\n\`\`\`\n\nFind the cause and fix it, then explain in one or two plain sentences what was wrong.`
+                )
+              )
+            }
+            className="press flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-sm font-medium text-ink"
+          >
+            <Wrench className="size-3.5" /> Fix it for me
+          </button>
+          <button type="button" onClick={() => void act(() => window.api.rerunSetup(featureId))} className="press flex h-8 items-center rounded-lg bg-hover px-3 text-sm">
+            Try again
+          </button>
+        </div>
+      )}
+      {open && (
+        <ul className="mt-3 flex flex-col gap-1 border-t border-line pt-2.5">
+          {lines.map((l, i) => (
+            <li key={i} className={clsx('flex items-start gap-2 text-xs', l.startsWith('✗') ? 'text-bad' : l.startsWith('⚠') ? 'text-warn' : 'text-muted')}>
+              <span className="mt-px">{l.startsWith('✓') ? '✓' : l.startsWith('✗') ? '✗' : l.startsWith('⚠') ? '!' : '…'}</span>
+              <span className="selectable">{l.replace(/^[✓✗…!⚠]\s*/, '')}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {item.status !== 'running' && needsOk && <EnvApproval featureId={featureId} />}
+    </div>
+  )
+}
+
 function StatusCard({ item }: { item: ChatItem }) {
   const lines = item.text.split('\n').filter(Boolean)
+  const creator = useIsCreator()
+  if (creator && item.id.startsWith('setup-')) return <CreatorSetupCard item={item} lines={lines} />
   return (
     <div
       className={clsx(
         'rounded-xl border px-4 py-3',
-        item.status === 'error' ? 'border-bad/30 bg-bad/5' : item.status === 'ok' ? 'border-ok/25 bg-ok/5' : 'border-line-strong bg-panel'
+        item.status === 'error' ? 'border-bad/30 bg-bad/5' : item.status === 'ok' ? 'border-line bg-raised/40' : 'border-line-strong bg-panel'
       )}
     >
       <div className="mb-1.5 flex items-center gap-2 text-sm font-medium">
         {item.status === 'running' ? (
-          <Spinner className="text-accent-strong" />
+          <Spinner className="text-info" />
         ) : item.status === 'ok' ? (
           <Check className="size-4 text-ok" />
         ) : (
@@ -139,6 +316,7 @@ function StatusCard({ item }: { item: ChatItem }) {
 
 /** Approve a change's .spindle commands right from its setup card (works in Creator mode too). */
 function EnvApproval({ featureId }: { featureId: string }) {
+  const creator = useIsCreator()
   const feature = useStore((s) => s.features.find((f) => f.id === featureId))
   const [env, setEnv] = useState<DevEnvView | null>(null)
   useEffect(() => {
@@ -148,8 +326,9 @@ function EnvApproval({ featureId }: { featureId: string }) {
   return (
     <div className="mt-3">
       <TrustBanner
+        simple={creator}
         view={env}
-        action="Approve and run setup"
+        action={creator ? 'Allow and continue' : 'Approve and run setup'}
         onTrust={async () => {
           const v = await act(() => window.api.trustDevEnv(feature.projectId!, feature.id))
           if (!v) return
@@ -182,19 +361,21 @@ const md = (text: string) => (
   </Markdown>
 )
 
-const Message = memo(function Message({ item }: { item: ChatItem }) {
+const Message = memo(function Message({ item, steps, plan }: { item: ChatItem; steps?: ChatItem[]; plan?: PlanItem[] }) {
   switch (item.role) {
     case 'user':
       return (
-        <div className="flex justify-end">
-          <div className="selectable max-w-[85%] rounded-2xl rounded-br-md bg-raised px-4 py-2.5 text-base leading-relaxed whitespace-pre-wrap">{item.text}</div>
+        <div className="rise-in flex justify-end">
+          <div className="selectable max-w-[85%] rounded-2xl rounded-br-md border border-line bg-raised px-4 py-2.5 text-base leading-relaxed whitespace-pre-wrap shadow-xs">{item.text}</div>
         </div>
       )
     case 'assistant':
-      return <div className={clsx('prose-chat text-fg', item.status === 'running' && 'stream-caret')}>{md(item.text)}</div>
+      return <div className={clsx('rise-in prose-chat text-fg', item.status === 'running' && 'stream-caret')}>{md(item.text)}</div>
     case 'thinking':
       return <Thinking item={item} />
     case 'tool':
+      if (item.tool?.name === 'Task' || item.tool?.name === 'Agent') return <SubagentCard item={item} steps={steps ?? EMPTY} />
+      if (plan) return <TodoCard item={item} latest todos={plan} />
       return <ToolRow item={item} />
     case 'error':
       return (
@@ -243,6 +424,7 @@ export function ThreadComposer({ feature }: { feature: Feature }) {
     <div className="mx-auto w-full max-w-3xl px-6 pb-5">
       <TurnStatus feature={feature} />
       <Composer
+        projectId={feature.projectId}
         cfg={cfg}
         onChange={onChange}
         running={running}
@@ -284,6 +466,28 @@ export function Chat({ feature }: { feature: Feature }) {
   }, [items, running, feature.id])
 
   const streaming = items.some((i) => i.status === 'running' && i.role === 'assistant')
+  // Subagent steps nest under their Task/Agent card instead of filling the main conversation.
+  // The plan (TaskCreate/TaskUpdate/TodoWrite) shows once, as a live checklist at its latest update.
+  // Creators see only the latest setup run; earlier runs (before an approval, a retry) are history.
+  const creator = useIsCreator()
+  const { top, childrenOf, plan } = useMemo(() => {
+    const childrenOf = new Map<string, ChatItem[]>()
+    const top: ChatItem[] = []
+    const plan = planFrom(items)
+    const lastSetup = creator ? items.filter((i) => i.id.startsWith('setup-') && i.status).at(-1)?.id : undefined
+    for (const it of items) {
+      if (lastSetup && it.id.startsWith('setup-') && it.status && it.id !== lastSetup) {
+        // superseded setup run
+      } else if (it.parentId) {
+        const list = childrenOf.get(it.parentId) ?? []
+        list.push(it)
+        childrenOf.set(it.parentId, list)
+      } else if (it.tool?.name === 'ToolSearch') {
+        // Claude loading its own tools on demand — harness plumbing, not something to show.
+      } else if (!isPlanTool(it) || it.id === plan.anchorId) top.push(it)
+    }
+    return { top, childrenOf, plan }
+  }, [items, creator])
   const waiting = useStore((s) => (s.requests[feature.id]?.length ?? 0) > 0)
   const requestCount = useStore((s) => s.requests[feature.id]?.length ?? 0)
   useLayoutEffect(() => {
@@ -310,13 +514,13 @@ export function Chat({ feature }: { feature: Feature }) {
           </Empty>
         ) : (
           <div className="mx-auto flex max-w-3xl flex-col gap-4 px-6 py-8">
-            {items.map((it) => (
-              <Message key={it.id} item={it} />
+            {top.map((it) => (
+              <Message key={it.id} item={it} steps={childrenOf.get(it.id)} plan={it.id === plan.anchorId ? plan.todos : undefined} />
             ))}
             <RequestCards featureId={feature.id} />
             {running && !streaming && !waiting && (
               <div className="flex items-center gap-2 text-sm text-faint">
-                <Spinner className="text-accent-strong" /> Working…
+                <Spinner className="text-info" /> <span className="shimmer-text">Working…</span>
               </div>
             )}
           </div>

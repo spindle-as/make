@@ -88,7 +88,7 @@ export function ChecksSection({ feature }: { feature: Feature }) {
         <div className="mt-3 flex gap-1" aria-hidden>
           {plan.map((p) => {
             const r = results.find((x) => x.name === p.name)
-            return <div key={p.name} className={clsx('h-1.5 flex-1 rounded-full', r ? (r.ok ? 'bg-ok' : 'bg-bad') : p.name === current?.name ? 'pulse bg-accent' : 'bg-hover')} />
+            return <div key={p.name} className={clsx('h-1.5 flex-1 rounded-full', r ? (r.ok ? 'bg-ok' : 'bg-bad') : p.name === current?.name ? 'pulse bg-info' : 'bg-hover')} />
           })}
         </div>
       )}
@@ -113,7 +113,7 @@ export function ChecksSection({ feature }: { feature: Feature }) {
                       <X className="size-4 text-bad" />
                     )
                   ) : isCurrent ? (
-                    <Spinner className="text-accent-strong" />
+                    <Spinner className="text-info" />
                   ) : (
                     <CircleDashed className="size-4 text-faint" />
                   )}
@@ -247,7 +247,7 @@ export function ReviewPanel({ feature, project }: { feature: Feature; project: P
           To submit this for review, connect the project to GitHub: add the repository in project settings.
           <button
             type="button"
-            className="ml-1.5 font-medium text-accent-strong hover:underline"
+            className="ml-1.5 font-medium text-info hover:underline"
             onClick={() => useStore.getState().openModal({ kind: 'project', projectId: project.id })}
           >
             Open project settings
@@ -343,7 +343,7 @@ export function ReviewPanel({ feature, project }: { feature: Feature; project: P
           {pr && (
             <div className="mt-4 rounded-xl border border-line bg-bg/40 p-3">
               <div className="flex items-center gap-2">
-                <GitPullRequest className={clsx('size-4', pr.state === 'MERGED' ? 'text-accent' : pr.state === 'OPEN' ? 'text-ok' : 'text-bad')} />
+                <GitPullRequest className={clsx('size-4', pr.state === 'MERGED' ? 'text-ok' : pr.state === 'OPEN' ? 'text-ok' : 'text-bad')} />
                 <span className="truncate text-sm font-medium">{pr.title}</span>
                 <Badge tone={pr.state === 'MERGED' ? 'accent' : pr.state === 'OPEN' ? 'ok' : 'bad'}>{pr.state === 'MERGED' ? 'applied' : pr.state === 'OPEN' ? 'in review' : 'closed'}</Badge>
                 <div className="flex-1" />

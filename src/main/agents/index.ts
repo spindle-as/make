@@ -14,6 +14,7 @@ export interface AgentHooks {
   onStatus(status: AgentStatus): void
   onSession(featureId: string, sessionId: string): void
   onCost(featureId: string, costUsd: number): void
+  onInit?(featureId: string, init: NonNullable<ParseOutput['init']>): void
   onFinished(featureId: string, ok: boolean): void
 }
 
@@ -80,6 +81,7 @@ export function claudeArgs(feature: Feature, settings: Settings, system: string,
   if (effort) args.push('--effort', effort)
   if (feature.maxBudgetUsd && feature.maxBudgetUsd > 0) args.push('--max-budget-usd', String(feature.maxBudgetUsd))
   if (feature.sessionId) args.push('--resume', feature.sessionId)
+  if (settings.claudeFallbackModel && settings.claudeFallbackModel !== model) args.push('--fallback-model', settings.claudeFallbackModel)
   // Enforced by Claude Code itself: these tools are refused even if the model tries.
   if (disallowedTools.length) args.push('--disallowedTools', ...disallowedTools)
   args.push('--append-system-prompt', system)
@@ -176,7 +178,9 @@ export function permissionResponse(req: PendingRequest, decision: PermissionDeci
           // "Always" = the CLI's own suggested rules, scoped to this session only
           ...(decision === 'allow-always' && req.suggestions?.length
             ? { updatedPermissions: (req.suggestions as Record<string, unknown>[]).map((sg) => ({ ...sg, destination: 'session' })) }
-            : {})
+            : {}),
+          // Approving a plan leaves plan mode: the agent goes on to build it with auto-edit.
+          ...(decision === 'approve-plan' ? { updatedPermissions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }] } : {})
         }
   return { type: 'control_response', response: { subtype: 'success', request_id: req.id, response } }
 }
@@ -303,7 +307,9 @@ export class AgentManager {
     const { GH_TOKEN: _a, GITHUB_TOKEN: _b, PLOI_API_TOKEN: _c, PLOI_TOKEN: _d, ...safeEnv } = process.env
     const child = spawn(bin, args, {
       cwd: feature.worktreePath,
-      env: { ...safeEnv, ...opts.env, SF_FEATURE: feature.slug, SF_LOCAL_URL: feature.localUrl ?? '' },
+      // CLAUDE_CODE_ENABLE_TODO_TOOLS: Claude Code's task list (TaskCreate/TaskUpdate) is off in headless
+      // mode by default; Spindle shows it as a live checklist, so turn it on.
+      env: { ...safeEnv, ...(interactive ? { CLAUDE_CODE_ENABLE_TODO_TOOLS: '1' } : {}), ...opts.env, SF_FEATURE: feature.slug, SF_LOCAL_URL: feature.localUrl ?? '' },
       stdio: ['pipe', 'pipe', 'pipe']
     })
     const run: Running = { child, stopped: false, interactive, pending: new Map(), queued: 0 }
@@ -351,6 +357,7 @@ export class AgentManager {
       const o = parser.feed(line)
       for (const item of o.items) this.hooks.onItem(feature.id, relative(item))
       if (o.sessionId) this.hooks.onSession(feature.id, o.sessionId)
+      if (o.init) this.hooks.onInit?.(feature.id, o.init)
       if (o.done) {
         finished = true
         if (o.done.costUsd !== undefined) this.hooks.onCost(feature.id, o.done.costUsd)

@@ -16,7 +16,7 @@ export function UpdateNotice() {
     <button
       type="button"
       onClick={() => openModal({ kind: 'update' })}
-      className="flex h-10 w-full items-center gap-2.5 rounded-lg bg-accent/15 px-3 text-sm font-medium text-accent-strong hover:bg-accent/25"
+      className="flex h-10 w-full items-center gap-2.5 rounded-lg bg-info/12 px-3 text-sm font-medium text-info hover:bg-info/20"
     >
       {u.status === 'downloading' ? <Spinner /> : <ArrowUpCircle className="size-4" />}
       <span className="flex-1 text-left">

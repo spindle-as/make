@@ -85,6 +85,8 @@ export class CodexStreamParser {
           tool: {
             name: 'TodoWrite',
             summary: todos.map((t) => `${t.completed ? '✓' : '·'} ${t.text}`).join('  '),
+            // Same shape the checklist reads for Claude's TodoWrite.
+            input: JSON.stringify({ items: todos }),
             status: phase === 'completed' ? 'ok' : 'running'
           }
         }

@@ -170,6 +170,16 @@ export function SettingsDialog({ onClose, initialTab }: { onClose: () => void; i
                 </div>
                 {modelSelect('claude')}
                 {modelSelect('codex')}
+                <Field label="Claude fallback model" hint="Used automatically when the main model is overloaded (Claude Code’s --fallback-model). Leave empty for none.">
+                  <Select value={s.claudeFallbackModel ?? ''} onChange={(e) => set('claudeFallbackModel', e.target.value || undefined)}>
+                    <option value="">None</option>
+                    {(models?.claude ?? []).filter((m) => m.id).map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
                 <Field label="Default permissions for new features" hint="Chats always start read-only.">
                   <Select value={s.defaultPermissionMode} onChange={(e) => set('defaultPermissionMode', e.target.value as PermissionMode)}>
                     {PERMISSIONS.map((p) => (
@@ -233,6 +243,20 @@ export function SettingsDialog({ onClose, initialTab }: { onClose: () => void; i
             {tab === 'appearance' && (
               <section className="flex flex-col gap-5">
                 <h2 className="text-xl font-semibold">Appearance</h2>
+                <Field label="Theme" hint="System follows your Mac’s light or dark setting.">
+                  <Segmented
+                    value={stored.theme ?? 'system'}
+                    onChange={async (theme) => {
+                      const next = await act(() => window.api.saveSettings({ theme }))
+                      if (next) setSettings(next)
+                    }}
+                    options={[
+                      { value: 'system', label: 'System' },
+                      { value: 'light', label: 'Light' },
+                      { value: 'dark', label: 'Dark' }
+                    ]}
+                  />
+                </Field>
                 <Field label="Text size" hint="Also ⌘+ / ⌘− / ⌘0 anywhere in the app.">
                   <Segmented
                     value={String(stored.uiScale ?? 1)}

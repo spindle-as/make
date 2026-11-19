@@ -14,6 +14,8 @@ export default defineConfig({
   },
   renderer: {
     root: 'src/renderer',
+    // Fixed port so the dev preview (.claude/launch.json) finds it; 5173 is often taken by other projects.
+    server: { port: 5180, strictPort: true },
     resolve: {
       alias: {
         '@shared': resolve('src/shared'),

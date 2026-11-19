@@ -3,7 +3,7 @@ import { Command, FolderGit2, GitBranch, MessageSquare, Search } from 'lucide-re
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { runAction } from '../lib/actions'
 import { shortcutFor } from '../lib/shortcuts'
-import { orderedThreads, useStore } from '../store'
+import { isDone, orderedThreads, useStore } from '../store'
 import { Kbd } from './ui'
 
 interface Item {
@@ -71,7 +71,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     }
     actions.push(act('toggle-sidebar', 'Toggle sidebar'), act('toggle-panel', 'Toggle side panel'), act('zoom-in', 'Bigger text'), act('zoom-out', 'Smaller text'), act('zoom-reset', 'Reset text size'))
 
-    const threads: Item[] = orderedThreads(s).map((f, i) => {
+    const threads: Item[] = [...orderedThreads(s), ...s.features.filter((f) => f.stage !== 'archived' && isDone(f))].map((f, i) => {
       const p = s.projects.find((x) => x.id === f.projectId)
       return {
         id: `t:${f.id}`,

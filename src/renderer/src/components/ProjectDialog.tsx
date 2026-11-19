@@ -5,6 +5,7 @@ import type { AgentKind, Environment, PloiSiteRef, Project } from '@shared/types
 import { act, useStore } from '../store'
 import { Badge, Button, Field, IconButton, Input, Modal, SectionTitle, Segmented, Spinner, Toggle } from './ui'
 import { DevEnvEditor, type SaveState } from './DevEnvEditor'
+import { useIsCreator } from '../lib/words'
 
 function EnvRow({ env, onChange, onRemove }: { env: Environment; onChange: (e: Environment) => void; onRemove: () => void }) {
   const [open, setOpen] = useState(false)
@@ -67,7 +68,7 @@ function PloiLinker({ project, onLink }: { project: Project; onLink: (ref: PloiS
   if (!hasToken) {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-dashed border-line-strong px-4 py-3 text-sm text-muted">
-        <Rocket className="size-5 text-accent-strong" />
+        <Rocket className="size-5 text-fg" />
         <span className="flex-1">Connect Ploi to deploy this project with one click.</span>
         <Button size="sm" variant="primary" onClick={() => openModal({ kind: 'settings', tab: 'integrations' })}>
           Connect Ploi
@@ -127,6 +128,7 @@ export function ProjectDialog({ projectId, onClose, tab: initialTab }: { project
   const removeLocal = useStore((s) => s.removeProject)
   const [p, setP] = useState<Project | undefined>(stored)
   const [tab, setTab] = useState<Tab>(initialTab ?? 'general')
+  const creator = useIsCreator()
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const envFlush = useRef<(() => Promise<void>) | null>(null)
@@ -266,6 +268,7 @@ export function ProjectDialog({ projectId, onClose, tab: initialTab }: { project
 
         {tab === 'environment' && (
           <>
+            {!creator && (
             <section>
               <SectionTitle>Local website</SectionTitle>
               <Segmented<'spindle' | 'herd'>
@@ -291,8 +294,9 @@ export function ProjectDialog({ projectId, onClose, tab: initialTab }: { project
                 </div>
               )}
             </section>
+            )}
             <section>
-              <SectionTitle>Development environment</SectionTitle>
+              <SectionTitle>{creator ? 'How changes are set up' : 'Development environment'}</SectionTitle>
               <DevEnvEditor project={p} onSaveState={setSaveState} flushRef={envFlush} />
             </section>
           </>

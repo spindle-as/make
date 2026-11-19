@@ -377,8 +377,15 @@ export function useSelected(): { feature: Feature | null; project: Project | nul
 }
 
 /** Threads in sidebar order: general chats first, then each project's threads, newest first. */
+/** Shipped changes and long-idle chats: tucked into the sidebar's "Done & older" section. */
+export function isDone(f: Feature, now = Date.now()): boolean {
+  if (f.kind === 'chat') return now - f.updatedAt > 14 * 24 * 60 * 60_000
+  return !!f.cleanedUp || f.stage === 'merged' || f.stage === 'deployed'
+}
+
+/** Active threads in sidebar order (⌘1–9 follow this). */
 export function orderedThreads(s: Pick<State, 'features' | 'projects'>): Feature[] {
-  const live = s.features.filter((f) => f.stage !== 'archived')
+  const live = s.features.filter((f) => f.stage !== 'archived' && !isDone(f))
   const byNew = (a: Feature, b: Feature) => b.createdAt - a.createdAt
   const general = live.filter((f) => !f.projectId).sort(byNew)
   return [...general, ...s.projects.flatMap((p) => live.filter((f) => f.projectId === p.id).sort(byNew))]

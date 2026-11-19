@@ -118,7 +118,7 @@ export function RightPanel({ feature, project }: { feature: Feature; project: Pr
           document.body.style.cursor = 'col-resize'
         }}
       />
-      <div className="drag flex h-14 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-line px-2">
+      <div className="no-scrollbar drag flex h-14 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-line px-2">
         {TABS.filter((t) => available.includes(t.key)).map((t) => (
           <button
             key={t.key}
@@ -127,7 +127,7 @@ export function RightPanel({ feature, project }: { feature: Feature; project: Pr
             aria-current={tab === t.key ? 'page' : undefined}
             title={`${t.label(w)}  ⌘⌥${TABS.indexOf(t) + 1}`}
             className={clsx(
-              'no-drag flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-sm transition-colors',
+              'press no-drag flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-sm',
               tab === t.key ? 'bg-active text-fg' : 'text-muted hover:bg-hover hover:text-fg'
             )}
           >

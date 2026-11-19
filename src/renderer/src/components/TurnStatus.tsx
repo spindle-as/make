@@ -6,6 +6,7 @@ import { runAction } from '../lib/actions'
 import { useWords } from '../lib/words'
 import { act, actOk, useStore } from '../store'
 import { Spinner, timeAgo } from './ui'
+import { planFrom } from '../lib/todos'
 
 const EMPTY: ChatItem[] = []
 
@@ -45,7 +46,7 @@ function Action({ children, onClick, primary, icon }: { children: ReactNode; onC
       onClick={onClick}
       className={clsx(
         'flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors',
-        primary ? 'bg-accent text-black hover:bg-accent-strong' : 'bg-raised text-fg hover:bg-hover'
+        primary ? 'bg-accent text-ink hover:bg-accent-strong' : 'bg-raised text-fg hover:bg-hover'
       )}
     >
       {icon}
@@ -62,6 +63,7 @@ export function TurnStatus({ feature }: { feature: Feature }) {
   const w = useWords()
   const status = useStore((s) => s.statuses[feature.id])
   const requests = useStore((s) => s.requests[feature.id]?.length ?? 0)
+  const planReady = useStore((s) => s.requests[feature.id]?.some((r) => r.toolName === 'ExitPlanMode') ?? false)
   const turn = useStore((s) => s.turns[feature.id])
   const items = useStore((s) => s.threads[feature.id] ?? EMPTY)
   const setTab = useStore((s) => s.setRightTab)
@@ -77,8 +79,12 @@ export function TurnStatus({ feature }: { feature: Feature }) {
       <Bar
         tone="warn"
         icon={<Hand className="size-4" />}
-        title="Waiting for you"
-        detail={`${agent} asked ${requests === 1 ? 'a question or for permission' : `${requests} questions or permissions`} — answer above to let it continue.`}
+        title={planReady ? 'The plan is ready' : 'Waiting for you'}
+        detail={
+          planReady
+            ? `${agent} finished planning — review the plan above and approve it, or say what to change.`
+            : `${agent} asked ${requests === 1 ? 'a question or for permission' : `${requests} questions or permissions`} — answer above to let it continue.`
+        }
         actions={<Action onClick={() => document.querySelector('[data-request-card]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>Show me</Action>}
       />
     )
@@ -88,10 +94,23 @@ export function TurnStatus({ feature }: { feature: Feature }) {
     return (
       <Bar
         tone="accent"
-        icon={<Spinner className="text-accent-strong" />}
-        title={`${agent} is working`}
+        icon={<Spinner className="text-info" />}
+        title={<span className="shimmer-text">{agent} is working</span>}
         meta={turn?.startedAt ? fmt(now - turn.startedAt) : undefined}
-        detail={<span className="font-mono">{activity(items)}</span>}
+        detail={(() => {
+          // With a plan (TodoWrite), say which step it's on; otherwise what it's doing right now.
+          const { todos } = planFrom(items)
+          const idx = todos.findIndex((t) => t.status === 'in_progress')
+          const doneCount = todos.filter((t) => t.status === 'completed').length
+          if (todos.length && idx >= 0) {
+            return (
+              <span>
+                Step {idx + 1} of {todos.length}: {todos[idx].content} <span className="text-faint">· {doneCount} done</span>
+              </span>
+            )
+          }
+          return <span className="font-mono">{activity(items)}</span>
+        })()}
         progress
         actions={
           <Action icon={<Square className="size-3.5" />} onClick={() => void act(() => window.api.stopAgent(feature.id))}>
@@ -118,7 +137,8 @@ export function TurnStatus({ feature }: { feature: Feature }) {
     )
   }
 
-  if (!items.length) return null
+  // Nothing asked yet (a brand-new change only has its setup card): the message box says enough.
+  if (!items.some((i) => i.role === 'user')) return null
   const finished = turn?.endedAt ? `finished ${timeAgo(turn.endedAt)}` : undefined
 
   if (feature.kind === 'chat') {
@@ -246,9 +266,9 @@ function Bar({
       aria-live="polite"
       className={clsx(
         'relative mb-2 flex items-center gap-3 overflow-hidden rounded-xl border px-3.5 py-2.5 text-sm',
-        tone === 'accent' && 'border-accent/40 bg-accent/10',
+        tone === 'accent' && 'border-info/35 bg-info/[0.07]',
         tone === 'warn' && 'border-warn/50 bg-warn/15',
-        tone === 'ok' && 'border-ok/35 bg-ok/10',
+        tone === 'ok' && 'border-line-strong bg-raised/60',
         tone === 'bad' && 'border-bad/40 bg-bad/10',
         tone === 'info' && 'border-line-strong bg-raised/60'
       )}
@@ -264,7 +284,7 @@ function Bar({
       {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
       {progress && (
         <span className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden" aria-hidden>
-          <span className="block h-full w-1/3 bg-accent" style={{ animation: 'indeterminate 1.4s ease-in-out infinite' }} />
+          <span className="block h-full w-1/3 bg-info" style={{ animation: 'indeterminate 1.4s ease-in-out infinite' }} />
         </span>
       )}
     </div>

@@ -2,7 +2,8 @@ import clsx from 'clsx'
 import { AlertTriangle, ArrowLeft, ArrowRight, ExternalLink, Monitor, MousePointerClick, RotateCw, Send, Smartphone, Tablet, Trash2, Wand2, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { create } from 'zustand'
-import type { Attachment } from '@shared/types'
+import type { Attachment, AuthTarget } from '@shared/types'
+import { LoginAs } from './LoginAs'
 import { uid } from '@shared/util'
 import { Button, IconButton, Segmented } from './ui'
 
@@ -44,9 +45,9 @@ const NO_NOTES: Note[] = []
 const PICKER = `(() => {
   if (window.__spindlePick) window.__spindlePick.stop();
   const box = document.createElement('div');
-  box.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;border:2px solid #c4ff48;background:rgba(196,255,72,.14);border-radius:4px;transition:all 60ms;box-shadow:0 0 0 4000px rgba(17,19,15,.18)';
+  box.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;border:2px solid #3b82f6;background:rgba(59,130,246,.12);border-radius:4px;transition:all 60ms;box-shadow:0 0 0 4000px rgba(10,10,12,.18)';
   const tag = document.createElement('div');
-  tag.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;background:#11130f;color:#c4ff48;font:12px/1.4 ui-monospace,monospace;padding:3px 7px;border-radius:5px;max-width:420px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis';
+  tag.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;background:#111114;color:#93c5fd;font:12px/1.4 ui-monospace,monospace;padding:3px 7px;border-radius:5px;max-width:420px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis';
   document.documentElement.append(box, tag);
   const css = (el) => {
     const parts = [];
@@ -149,10 +150,12 @@ export interface LivePreviewProps {
   /** resolve true when sent, so the notes are cleared */
   onSend(prompt: string, attachments: Attachment[], comments: string[]): Promise<boolean>
   onFixErrors?(prompt: string): void
+  /** Laravel apps: "Log in as" a user from this app's database */
+  auth?: AuthTarget
 }
 
 /** A live browser on a local site with "point at something to change". */
-export function LivePreview({ notesKey, url: siteUrl, partition, active = true, staleSignal = 0, banner, intro, sendLabel, sendHint, onSend, onFixErrors }: LivePreviewProps) {
+export function LivePreview({ notesKey, url: siteUrl, partition, active = true, staleSignal = 0, banner, intro, sendLabel, sendHint, onSend, onFixErrors, auth }: LivePreviewProps) {
   const ref = useRef<WebviewEl | null>(null)
   const [url, setUrl] = useState(siteUrl)
   const [viewport, setViewport] = useState<Viewport>('desktop')
@@ -291,7 +294,7 @@ export function LivePreview({ notesKey, url: siteUrl, partition, active = true, 
             type="button"
             onClick={reload}
             title="The AI finished a turn. Reload to see its changes — your current page state is kept until you do."
-            className="ml-1 flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-accent/20 px-2.5 text-xs font-semibold text-accent-strong hover:bg-accent/30"
+            className="ml-1 flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-info/15 px-2.5 text-xs font-semibold text-info hover:bg-info/25"
           >
             <RotateCw className="size-3.5" /> New changes — reload
           </button>
@@ -304,6 +307,18 @@ export function LivePreview({ notesKey, url: siteUrl, partition, active = true, 
           >
             <AlertTriangle className="size-3.5" /> {errors.length}
           </button>
+        )}
+        {auth && (
+          <LoginAs
+            target={auth}
+            partition={partition}
+            url={url}
+            onNavigate={(next) => {
+              if (!ref.current) return
+              if (next === ref.current.getURL()) ref.current.reload()
+              else ref.current.src = next
+            }}
+          />
         )}
         <IconButton title="Open in browser" onClick={() => void window.api.openExternal(url)}>
           <ExternalLink className="size-4" />
@@ -381,7 +396,7 @@ export function LivePreview({ notesKey, url: siteUrl, partition, active = true, 
                     }}
                     rows={2}
                     placeholder="What should change? e.g. “Make this button smaller and align it with the heading”"
-                    className="w-full resize-none rounded-lg border border-line-strong bg-bg/60 px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-accent"
+                    className="w-full resize-none rounded-lg border border-line-strong bg-bg/60 px-2.5 py-1.5 text-sm outline-none placeholder:text-faint focus:border-info/60"
                   />
                 </div>
                 <IconButton title="Remove" className="size-7" onClick={() => setNotes(notesKey, notes.filter((x) => x.id !== n.id))}>

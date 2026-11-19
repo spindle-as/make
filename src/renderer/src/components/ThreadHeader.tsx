@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Archive, Check, Code2, ExternalLink, FolderOpen, GitBranch, MessageSquare, PanelLeft, PanelRight, Rocket, SquareTerminal } from 'lucide-react'
+import { Archive, Check, Code2, ExternalLink, FolderOpen, GitBranch, MessageSquare, PanelRight, Rocket, SquareTerminal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Feature, FeatureStage, Project } from '@shared/types'
 import { runAction } from '../lib/actions'
@@ -30,22 +30,22 @@ function Pipeline({ feature }: { feature: Feature }) {
         const active = cur === idx || (step.key === 'coding' && feature.stage === 'setup')
         return (
           <li key={step.key} className="flex items-center gap-1">
-            {i > 0 && <div className={clsx('h-px w-4', done || active ? 'bg-accent/60' : 'bg-line-strong')} />}
+            {i > 0 && <div className={clsx('h-px w-4', done || active ? 'bg-fg/40' : 'bg-line-strong')} />}
             <button
               type="button"
               onClick={() => setTab(step.tab)}
               aria-current={active ? 'step' : undefined}
               className={clsx(
-                'flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors',
-                done && 'border-ok/30 bg-ok/10 text-ok',
-                active && 'border-accent/50 bg-accent/15 text-accent-strong',
+                'press flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium',
+                done && 'border-line text-muted hover:text-fg',
+                active && 'border-fg/30 bg-active text-fg shadow-xs',
                 !done && !active && 'border-line text-faint hover:text-muted'
               )}
             >
               {done ? (
-                <Check className="size-3.5" />
+                <Check className="size-3.5 text-ok" />
               ) : active && running && step.key === 'coding' ? (
-                <span className="pulse size-2 rounded-full bg-current" />
+                <span className="pulse size-2 rounded-full bg-info" />
               ) : (
                 <span className="tabular-nums">{i + 1}</span>
               )}
@@ -91,7 +91,7 @@ function Title({ feature }: { feature: Feature }) {
       />
     )
   return (
-    <button type="button" onClick={() => setEditing(true)} title="Rename" className="no-drag block max-w-full truncate rounded-md text-left text-base leading-tight font-semibold hover:text-accent-strong">
+    <button type="button" onClick={() => setEditing(true)} title="Rename" className="no-drag block max-w-full truncate rounded-md text-left text-base leading-tight font-semibold hover:text-fg">
       {feature.title}
     </button>
   )
@@ -105,12 +105,7 @@ export function ThreadHeader({ feature, project }: { feature: Feature; project: 
   const creator = useIsCreator()
   return (
     <>
-      <header className={clsx('drag flex h-14 shrink-0 items-center gap-3 border-b border-line px-4', !sidebarOpen && 'pl-20')}>
-        {!sidebarOpen && (
-          <IconButton title="Show sidebar" shortcut="toggle-sidebar" onClick={() => void runAction('toggle-sidebar')}>
-            <PanelLeft className="size-4" />
-          </IconButton>
-        )}
+      <header className={clsx('drag flex h-14 shrink-0 items-center gap-3 border-b border-line px-4', !sidebarOpen && 'pl-8')}>
         <div className="min-w-0 flex-1">
           <Title feature={feature} />
           <div className="flex min-w-0 items-center gap-1.5 text-xs leading-tight whitespace-nowrap text-faint">

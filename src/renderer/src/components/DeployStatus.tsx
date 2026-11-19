@@ -48,7 +48,7 @@ export function DeployPill({ project, feature }: { project: Project; feature?: F
       onClick={() => setTab('ship')}
       className={clsx(
         'no-drag flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 text-sm font-medium transition-colors',
-        running(d) && 'border-accent/50 bg-accent/15 text-accent-strong',
+        running(d) && 'border-info/40 bg-info/10 text-info',
         d.status === 'success' && 'border-ok/30 bg-ok/10 text-ok',
         d.status === 'failed' && 'border-bad/40 bg-bad/10 text-bad'
       )}
@@ -79,7 +79,7 @@ export function ProjectDeployDot({ projectId }: { projectId: string }) {
   if (!active && !lastFailed) return null
   return (
     <span title={active ? 'Deploying…' : 'A recent deploy failed'} className="flex items-center">
-      {active ? <Rocket className="pulse size-3.5 text-accent-strong" /> : <Rocket className="size-3.5 text-bad" />}
+      {active ? <Rocket className="pulse size-3.5 text-info" /> : <Rocket className="size-3.5 text-bad" />}
     </span>
   )
 }
@@ -166,11 +166,11 @@ export function EnvDeployCard({ project, env, feature }: { project: Project; env
     <div
       className={clsx(
         'rounded-xl border p-4 transition-colors',
-        isRunning ? 'border-accent/50 bg-accent/[0.06]' : d?.status === 'failed' ? 'border-bad/40 bg-bad/[0.04]' : 'border-line bg-raised/40'
+        isRunning ? 'border-info/40 bg-info/[0.06]' : d?.status === 'failed' ? 'border-bad/40 bg-bad/[0.04]' : 'border-line bg-raised/40'
       )}
     >
       <div className="flex items-center gap-2.5">
-        <Rocket className={clsx('size-5', isRunning ? 'pulse text-accent-strong' : 'text-muted')} />
+        <Rocket className={clsx('size-5', isRunning ? 'pulse text-info' : 'text-muted')} />
         <span className="text-base font-medium capitalize">{env.name}</span>
         <span className="font-mono text-xs text-faint">← {env.branch}</span>
         {env.autoDeployOnMerge && <Badge tone="info">auto on merge</Badge>}
@@ -190,7 +190,7 @@ export function EnvDeployCard({ project, env, feature }: { project: Project; env
 
       {isRunning && (
         <div className="mt-3">
-          <div className="flex items-center gap-2 text-sm text-accent-strong">
+          <div className="flex items-center gap-2 text-sm text-info">
             <Loader2 className="size-4 animate-spin" />
             {d!.status === 'queued' ? 'Queuing deployment…' : 'Deploying'}
             {d!.startedAt && <span className="font-mono tabular-nums">{duration(now - d!.startedAt)}</span>}

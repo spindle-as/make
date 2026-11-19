@@ -241,7 +241,7 @@ export function ShipPanel({ feature, project }: { feature: Feature; project: Pro
         ) : (
           <div className="rounded-lg border border-line bg-raised/50 p-3">
             <div className="flex items-center gap-2">
-              <GitPullRequest className={clsx('size-4', pr.state === 'MERGED' ? 'text-accent-strong' : pr.state === 'OPEN' ? 'text-ok' : 'text-bad')} />
+              <GitPullRequest className={clsx('size-4', pr.state === 'MERGED' ? 'text-fg' : pr.state === 'OPEN' ? 'text-ok' : 'text-bad')} />
               <button className="truncate text-left text-sm font-medium hover:underline" onClick={() => void window.api.openExternal(pr.url)}>
                 #{pr.number} {pr.title}
               </button>
@@ -357,7 +357,7 @@ export function ShipPanel({ feature, project }: { feature: Feature; project: Pro
         {envs.length === 0 ? (
           <div className="text-xs text-faint">
             No environments yet.{' '}
-            <button className="text-accent-strong hover:underline" onClick={() => useStore.getState().openModal({ kind: 'project', projectId: project.id })}>
+            <button className="text-info hover:underline" onClick={() => useStore.getState().openModal({ kind: 'project', projectId: project.id })}>
               Add one in project settings
             </button>
             .

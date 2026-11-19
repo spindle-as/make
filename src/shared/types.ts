@@ -28,8 +28,10 @@ export type DbMode = 'shared' | 'empty' | 'clone'
 
 export interface ProjectDatabase {
   mode: DbMode
-  /** run `php artisan migrate` (and seeders for empty databases) after provisioning */
+  /** run `php artisan migrate` after provisioning */
   migrate: boolean
+  /** seed a brand-new (empty) database with sample data; default: when the seeders do something */
+  seed?: boolean
 }
 
 export interface FeatureDatabase {
@@ -98,6 +100,8 @@ export interface Project {
   captureMail?: boolean
   access?: RepoAccess
   setup?: ProjectSetupState
+  /** what Claude Code reported it has loaded here, from its last session */
+  harness?: HarnessInfo
   /** URL of the main checkout's local site */
   localUrl?: string
   /** who serves local sites: Spindle's built-in HTTPS server or Laravel Herd */
@@ -266,6 +270,8 @@ export interface ChatItem {
   ts: number
   /** live state for system cards (e.g. worktree setup) and streaming text */
   status?: 'running' | 'ok' | 'error'
+  /** set on items produced inside a subagent: the parent Task/Agent tool call's id */
+  parentId?: string
   tool?: {
     name: string
     summary: string
@@ -273,6 +279,42 @@ export interface ChatItem {
     output?: string
     status: 'running' | 'ok' | 'error'
   }
+}
+
+// ---------- Coding harness (what Claude Code / Codex has loaded) ----------
+
+/** From Claude Code's init event (refreshed every turn) plus what's on disk. */
+export interface HarnessInfo {
+  version?: string
+  model?: string
+  outputStyle?: string
+  slashCommands: string[]
+  agents: string[]
+  skills: string[]
+  mcpServers: { name: string; status: string }[]
+  plugins: string[]
+  updatedAt: number
+}
+
+export interface HarnessCommand {
+  name: string
+  description?: string
+  /** 'built-in' | 'project' | 'user' | 'skill' | 'plugin' | 'codex prompt' */
+  source: string
+}
+
+export interface HarnessView {
+  agent: AgentKind
+  commands: HarnessCommand[]
+  agents: { name: string; description?: string; source: string }[]
+  mcpServers: { name: string; status: string }[]
+  skills: number
+  plugins: string[]
+  model?: string
+  version?: string
+  outputStyle?: string
+  /** false until Claude Code has run once in this project (lists then come from disk only) */
+  live: boolean
 }
 
 // ---------- Models ----------
@@ -290,6 +332,8 @@ export interface ModelOption {
   description?: string
   efforts: EffortOption[]
   defaultEffort?: string
+  /** list section, e.g. "Latest" or "Exact versions" */
+  group?: string
 }
 
 export interface ModelCatalog {
@@ -354,7 +398,8 @@ export interface PendingRequest {
   createdAt: number
 }
 
-export type PermissionDecision = 'allow' | 'allow-always' | 'deny'
+/** 'approve-plan' = allow ExitPlanMode and leave plan mode for auto-edit */
+export type PermissionDecision = 'allow' | 'allow-always' | 'deny' | 'approve-plan'
 
 // ---------- Background processes ----------
 
@@ -397,8 +442,10 @@ export interface DevEnvironment {
     /** custom backend instead of PHP's server, e.g. "npm run preview -- --port $PORT" */
     command?: string
   }
-  /** shell commands run in order in every new change's workspace */
+  /** shell commands run in order in every new change's workspace (install, build) */
   setup: string[]
+  /** run after the database is ready and migrated (storage:link, keys, custom seeders) */
+  prepare: string[]
   /** long-running processes per change (dev server, queue worker…) */
   processes: ServiceDef[]
   /** quick commands shown in the terminal panel */
@@ -432,6 +479,10 @@ export interface DevEnvView {
   parseError?: string
   runtime: { php?: RuntimeMatch | null; node?: RuntimeMatch | null }
   installed: { php: RuntimeMatch[]; node: RuntimeMatch[] }
+  /** commands found in README / Makefile / bin/setup, offered to add */
+  suggestions: { command: string; source: string }[]
+  /** why the detected setup looks the way it does */
+  reasons: string[]
   /** hints detected from the project (composer.json php constraint, .nvmrc) */
   hints: { php?: string; node?: string; phpMin?: string }
   /** problems with the pinned versions (not installed, too old for the installed packages) */
@@ -581,6 +632,8 @@ export interface Settings {
   claudeModel: string
   codexModel: string
   claudeEffort: string
+  /** Claude Code --fallback-model: used automatically when the main model is overloaded */
+  claudeFallbackModel?: string
   codexEffort: string
   editorCommand: string // e.g. "phpstorm" or "open -a 'PhpStorm'"
   branchPrefix: string
@@ -602,6 +655,8 @@ export interface Settings {
   onboarded: boolean
   /** download new versions in the background; installing always waits for you */
   autoUpdate: boolean
+  /** appearance: follow macOS, or force light/dark */
+  theme: 'system' | 'light' | 'dark'
 }
 
 // ---------- App updates ----------
@@ -667,6 +722,9 @@ export interface NewFeatureInput {
 }
 
 /** The project's main version: running, current, and the starting point for new changes. */
+/** Whose app a "log in as" acts on: a change's workspace, or a project's main version. */
+export type AuthTarget = { featureId: string } | { projectId: string }
+
 export interface MainSiteState {
   url?: string
   branch: string
@@ -809,12 +867,22 @@ export interface Api {
   ensureServices(featureId: string): Promise<void>
   webServerStatus(): Promise<WebServerStatus>
   /** a project's environment, or (with featureId) the one a change's worktree uses */
+  /** slash commands, subagents, skills and MCP servers the agent has for a project (or a plain chat) */
+  harness(projectId: string | null, agent: AgentKind): Promise<HarnessView>
+  /** users of a Laravel app (a change's own database, or the main version's) for "Log in as" */
+  authUsers(target: AuthTarget, query?: string): Promise<{ total: number; users: { id: string; name: string; email: string | null; role: string | null }[] }>
+  /** log the preview (its cookie jar = partition) in as a user; returns where to go */
+  loginAs(target: AuthTarget, userId: string, partition: string, url: string): Promise<{ home: string; user: { id: string; name: string | null; email: string | null } }>
+  /** clear the preview's cookies for a site (log out) */
+  logoutPreview(partition: string, url: string): Promise<void>
   /** start (if needed) and update the project's main version; returns where it runs */
   mainSite(projectId: string): Promise<MainSiteState>
   devEnv(projectId: string, featureId?: string): Promise<DevEnvView>
   /** baseHash: the version the editor started from — refused if the file changed since */
   saveDevEnv(projectId: string, config: DevEnvironment, instructions?: string, baseHash?: string): Promise<DevEnvView>
   detectDevEnv(projectId: string): Promise<DevEnvironment>
+  /** ask Claude (read-only) to work out how the project runs; returns a proposal to review */
+  aiDetectDevEnv(projectId: string): Promise<{ config: DevEnvironment; notes: string }>
   trustDevEnv(projectId: string, featureId?: string): Promise<DevEnvView>
   trustCertificates(): Promise<void>
   stopProcess(processId: string): Promise<void>
@@ -844,4 +912,5 @@ export interface Events {
   'checks:changed': ChecksProgress
   'update:changed': UpdateState
   'main:updated': { projectId: string; commits: number }
+  'harness:changed': { projectId: string }
 }

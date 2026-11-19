@@ -18,7 +18,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode; label: strin
       <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
         <div className="text-sm font-medium text-bad">{this.props.label} crashed</div>
         <pre className="selectable max-w-full overflow-auto text-xs whitespace-pre-wrap text-muted">{this.state.error.message}</pre>
-        <button className="text-xs text-accent-strong hover:underline" onClick={() => this.setState({ error: null })}>
+        <button className="text-xs text-info hover:underline" onClick={() => this.setState({ error: null })}>
           Try again
         </button>
       </div>

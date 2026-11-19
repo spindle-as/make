@@ -33,7 +33,8 @@ const defaults: StateFile['settings'] = {
   projectsRoot: join(homedir(), 'Spindle', 'projects'),
   uiScale: 1,
   onboarded: false,
-  autoUpdate: true
+  autoUpdate: true,
+  theme: 'system'
 }
 
 function dir(): string {

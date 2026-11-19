@@ -19,6 +19,15 @@ import { runAction } from './lib/actions'
 import { matchShortcut } from './lib/shortcuts'
 import { useSelected, useStore } from './store'
 
+/** Light/dark from Settings → Appearance ("system" follows macOS through CSS). */
+function useTheme() {
+  const theme = useStore((s) => s.settings?.theme ?? 'system')
+  useEffect(() => {
+    if (theme === 'system') document.documentElement.removeAttribute('data-theme')
+    else document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
+}
+
 /** Dock badge = threads that need you (a question/approval, or finished while you were away). */
 function useAttentionBadge() {
   const count = useStore((s) => {
@@ -69,7 +78,6 @@ export default function App() {
   const modal = useStore((s) => s.modal)
   const openModal = useStore((s) => s.openModal)
   const rightOpen = useStore((s) => s.rightOpen)
-  const sidebarOpen = useStore((s) => s.sidebarOpen)
   const view = useStore((s) => s.view)
   const onboarded = useStore((s) => s.settings?.onboarded ?? true)
   const { feature, project } = useSelected()
@@ -79,6 +87,7 @@ export default function App() {
   }, [init])
   useGlobalKeys()
   useAttentionBadge()
+  useTheme()
 
   if (!ready) return <div className="drag h-full" />
   const close = () => openModal(null)
@@ -96,7 +105,7 @@ export default function App() {
 
   return (
     <div className="flex h-full">
-      {sidebarOpen && <Sidebar />}
+      <Sidebar />
       <main className="flex min-w-0 flex-1">
         {view === 'thread' && feature ? (
           <>

@@ -160,7 +160,7 @@ export function ProjectSetupCard({ project }: { project: Project }) {
   return (
     <div className={clsx('rounded-2xl border p-5', failed ? 'border-bad/40 bg-bad/[0.05]' : 'border-line-strong bg-panel')}>
       <div className="mb-3 flex items-center gap-2 text-base font-medium">
-        {failed ? <X className="size-5 text-bad" /> : <Spinner className="size-5 text-accent" />}
+        {failed ? <X className="size-5 text-bad" /> : <Spinner className="size-5 text-info" />}
         {failed ? 'Setting up hit a snag' : `Getting ${project.name} ready`}
       </div>
       <ul className="flex flex-col gap-2">
@@ -170,7 +170,7 @@ export function ProjectSetupCard({ project }: { project: Project }) {
               {s.status === 'done' ? (
                 <Check className="size-4 text-ok" />
               ) : s.status === 'running' ? (
-                <Spinner className="size-4 text-accent" />
+                <Spinner className="size-4 text-info" />
               ) : s.status === 'failed' ? (
                 <X className="size-4" />
               ) : (

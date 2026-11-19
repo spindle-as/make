@@ -4,6 +4,7 @@ import type { Project, ProjectSetupState } from '@shared/types'
 import { captureMailEnv, ensureDatabase, readEnv } from './db'
 import { exec, shell } from './exec'
 import * as herd from './herd'
+import { seederDoesSomething } from './detect'
 
 type Step = ProjectSetupState['steps'][number]
 
@@ -13,6 +14,7 @@ export const SETUP_STEPS: Pick<Step, 'id' | 'label'>[] = [
   { id: 'db', label: 'Setting up your database' },
   { id: 'migrate', label: 'Preparing your data' },
   { id: 'assets', label: 'Building the interface' },
+  { id: 'prepare', label: 'Finishing touches' },
   { id: 'site', label: 'Starting your application' }
 ]
 
@@ -35,7 +37,7 @@ const pkg = (dir: string): { scripts?: Record<string, string> } | null => {
 export async function runSetup(
   project: Project,
   state: ProjectSetupState,
-  opts: { mailPort: number; capture: boolean; env?: Record<string, string>; php?: string; site?: () => Promise<string | false> },
+  opts: { mailPort: number; capture: boolean; env?: Record<string, string>; php?: string; prepare?: string[]; seed?: boolean; site?: () => Promise<string | false> },
   update: (s: ProjectSetupState, patch?: Partial<Project>) => void
 ): Promise<ProjectSetupState> {
   const dir = project.path
@@ -89,9 +91,15 @@ export async function runSetup(
       if (!laravel) return false
       const status = await exec('php', ['artisan', 'migrate:status', '--no-ansi'], { cwd: dir, env: opts.env, timeoutMs: 120_000 })
       const fresh = status.code !== 0 || /not found|No migrations/i.test(status.stdout + status.stderr) || !/Ran\b|\[\d+\]|Batch/i.test(status.stdout)
-      const seeder = existsSync(join(dir, 'database', 'seeders', 'DatabaseSeeder.php'))
+      const seeder = opts.seed ?? seederDoesSomething(dir)
       await sh(`php artisan migrate --force${fresh && seeder ? ' --seed' : ''}`)
       return fresh && seeder ? 'Database structure created and filled with sample data' : 'Database structure up to date'
+    },
+    prepare: async () => {
+      // From .spindle / detection: storage link, package keys, custom seeders — after the database is ready.
+      if (!opts.prepare?.length) return false
+      for (const cmd of opts.prepare) await sh(cmd)
+      return `Ran ${opts.prepare.length} step${opts.prepare.length > 1 ? 's' : ''}`
     },
     assets: async () => {
       if (!p?.scripts?.build) return false

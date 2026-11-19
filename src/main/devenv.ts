@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DevEnvironment, Project, ServiceDef } from '@shared/types'
 import { detectServices } from './processes'
+import { detectSetup, installCommand as detectInstall } from './detect'
 
 /**
  * A project's development environment, stored in the repo:
@@ -49,12 +50,7 @@ const readJson = <T>(file: string): T | null => {
 export function detect(root: string, env: Record<string, string>, hasDatabase: boolean): DevEnvironment {
   const laravel = existsSync(join(root, 'artisan'))
   const pkg = readJson<{ scripts?: Record<string, string>; packageManager?: string }>(join(root, 'package.json'))
-  const setup: string[] = []
-  if (existsSync(join(root, 'composer.json'))) setup.push('composer install --no-interaction --prefer-dist --no-progress')
-  if (pkg) {
-    setup.push(installCommand(root))
-    if (laravel && pkg.scripts?.build) setup.push(`${runner(root)} run build`)
-  }
+  const plan = detectSetup(root)
   const commands = laravel
     ? ['php artisan test', 'php artisan migrate', 'composer install', ...(pkg?.scripts?.build ? [`${runner(root)} run build`] : []), 'php artisan optimize:clear']
     : pkg
@@ -65,10 +61,11 @@ export function detect(root: string, env: Record<string, string>, hasDatabase: b
     version: 1,
     runtime: { ...(hints.node ? { node: hints.node } : {}) },
     site: {},
-    setup,
+    setup: plan.setup,
+    prepare: plan.prepare,
     processes: detectServices(root, env),
     commands,
-    database: hasDatabase ? { mode: 'clone', migrate: laravel } : { mode: 'shared', migrate: false },
+    database: hasDatabase ? { mode: 'clone', migrate: plan.migrate, seed: plan.seed } : { mode: 'shared', migrate: false, seed: false },
     mail: { capture: true },
     env: {}
   }
@@ -81,11 +78,7 @@ function runner(root: string): string {
   return 'npm'
 }
 
-function installCommand(root: string): string {
-  const r = runner(root)
-  if (r === 'npm') return existsSync(join(root, 'package-lock.json')) ? 'npm ci --no-audit --no-fund' : 'npm install --no-audit --no-fund'
-  return `${r} install`
-}
+const installCommand = detectInstall
 
 /** Version hints: composer.json's PHP constraint and .nvmrc / .node-version / engines.node. */
 export function runtimeHints(root: string): { php?: string; phpMin?: string; node?: string } {
@@ -151,10 +144,15 @@ export function normalize(raw: unknown, fallback: DevEnvironment): DevEnvironmen
     runtime: { php: str(runtime.php), node: str(runtime.node) },
     site: { docroot: str(site.docroot), command: str(site.command) },
     setup: strList(r.setup) ?? fallback.setup,
+    prepare: strList(r.prepare) ?? fallback.prepare ?? [],
     processes: processes ?? fallback.processes,
     commands: strList(r.commands) ?? fallback.commands,
     database: db
-      ? { mode: ['shared', 'empty', 'clone'].includes(db.mode) ? db.mode : fallback.database.mode, migrate: typeof db.migrate === 'boolean' ? db.migrate : fallback.database.migrate }
+      ? {
+          mode: ['shared', 'empty', 'clone'].includes(db.mode) ? db.mode : fallback.database.mode,
+          migrate: typeof db.migrate === 'boolean' ? db.migrate : fallback.database.migrate,
+          seed: typeof db.seed === 'boolean' ? db.seed : fallback.database.seed
+        }
       : fallback.database,
     mail: { capture: r.mail && typeof r.mail.capture === 'boolean' ? r.mail.capture : fallback.mail.capture },
     env: r.env && typeof r.env === 'object' ? env : fallback.env
@@ -203,6 +201,7 @@ export function write(root: string, config: DevEnvironment, instructions?: strin
     runtime: clean(config.runtime),
     site: clean(config.site),
     setup: config.setup.map((s) => s.trim()).filter(Boolean),
+    prepare: (config.prepare ?? []).map((s) => s.trim()).filter(Boolean),
     processes: config.processes.filter((x) => x.command.trim()).map((x) => ({ name: x.name.trim() || x.command, command: x.command.trim(), autoStart: x.autoStart })),
     commands: config.commands.map((s) => s.trim()).filter(Boolean),
     database: config.database,
@@ -238,6 +237,7 @@ export function readInstructions(root: string): string {
 export function autoRunCommands(c: DevEnvironment): string[] {
   return [
     ...c.setup.map((s) => `setup: ${s}`),
+    ...(c.prepare ?? []).map((s) => `after database: ${s}`),
     ...c.processes.map((p) => `${p.autoStart ? 'auto-start' : 'process'} “${p.name}”: ${p.command}`),
     ...(c.site.command ? [`site: ${c.site.command}`] : []),
     ...Object.entries(c.env).map(([k, v]) => `env: ${k}=${v}`)
@@ -257,7 +257,10 @@ export function setupLabel(cmd: string, done = false): string {
     [/^(npm (ci|install)|pnpm install|yarn( install)?$|bun install)/, 'Installing JavaScript packages', 'JavaScript packages installed'],
     [/^(npm|pnpm|yarn|bun) run build/, 'Building the interface', 'Interface built'],
     [/^php artisan migrate/, 'Running migrations', 'Migrations ran'],
-    [/^php artisan key:generate/, 'Generating the app key', 'App key generated']
+    [/^php artisan key:generate/, 'Generating the app key', 'App key generated'],
+    [/php artisan storage:link/, 'Linking public storage', 'Public storage linked'],
+    [/php artisan passport:keys/, 'Creating Passport keys', 'Passport keys ready'],
+    [/php artisan db:seed/, 'Adding sample data', 'Sample data added']
   ]
   for (const [re, running, finished] of pairs) if (re.test(c)) return done ? finished : running
   const short = c.split('\n')[0].slice(0, 60)

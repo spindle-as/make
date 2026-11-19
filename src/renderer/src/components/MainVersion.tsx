@@ -68,7 +68,7 @@ export function MainVersion({
       <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted">
         <AlertTriangle className="size-6 text-warn" />
         <div>The main version couldn’t start: {error}</div>
-        <button type="button" className="font-medium text-accent-strong hover:underline" onClick={() => void load()}>
+        <button type="button" className="font-medium text-info hover:underline" onClick={() => void load()}>
           Try again
         </button>
       </div>
@@ -90,6 +90,7 @@ export function MainVersion({
       notesKey={`main:${project.id}`}
       url={state.url}
       partition={`persist:main-${project.slug}`}
+      auth={project.isLaravel ? { projectId: project.id } : undefined}
       staleSignal={updates}
       intro="Start a new change from the current version of the app. Make these changes"
       sendLabel="Start a change"

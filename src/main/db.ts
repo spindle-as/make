@@ -1,7 +1,7 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { createConnection } from 'node:net'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, relative } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 import type { DbDriver, DbService, FeatureDatabase } from '@shared/types'
 import { exec, shell, shellQuote } from './exec'
 
@@ -50,6 +50,52 @@ export function configFromEnv(env: Record<string, string>): DbConfig | null {
 }
 
 /** Database name for a feature: `<project>_<feature>`, safe for MySQL/Postgres identifiers. */
+/** The SQLite file Laravel uses for a project in `dir` (absolute), or ':memory:'. */
+export function sqlitePath(dir: string, database: string): string {
+  if (!database) return join(dir, 'database', 'database.sqlite')
+  if (database === ':memory:') return database
+  return isAbsolute(database) ? database : join(dir, database)
+}
+
+/** `file` relative to `dir` when it lives inside it (symlinks resolved), else null. */
+function relativeInside(dir: string, file: string): string | null {
+  const real = (p: string) => {
+    try {
+      return realpathSync(p)
+    } catch {
+      return p
+    }
+  }
+  const d = real(dir)
+  // Resolve through the nearest folder that exists (database/ may not exist yet).
+  let base = file
+  const rest: string[] = []
+  while (!existsSync(base) && dirname(base) !== base) {
+    rest.unshift(basename(base))
+    base = dirname(base)
+  }
+  const f = join(real(base), ...rest)
+  const rel = relative(d, f)
+  return rel && !rel.startsWith('..') && !isAbsolute(rel) ? rel : null
+}
+
+/**
+ * A change that shares the main database: with SQLite that means pointing its .env at the main
+ * checkout's file — otherwise Laravel looks for a (missing, git-ignored) file inside the worktree.
+ */
+export function shareSqlite(mainDir: string, worktree: string): string | null {
+  const cfg = configFromEnv(readEnv(worktree))
+  if (cfg?.driver !== 'sqlite') return null
+  const file = sqlitePath(mainDir, configFromEnv(readEnv(mainDir))?.database ?? cfg.database)
+  if (file === ':memory:') return null
+  if (!existsSync(file)) {
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, '')
+  }
+  setEnvKey(worktree, 'DB_DATABASE', file)
+  return file
+}
+
 export function featureDbName(projectSlug: string, featureSlug: string): string {
   const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
   return `${clean(projectSlug)}_${clean(featureSlug)}`.slice(0, 63).replace(/_+$/, '')
@@ -160,20 +206,27 @@ export async function provision(
   if (!cfg) return null
 
   if (cfg.driver === 'sqlite') {
-    const resolve = (base: string, p: string) => (p ? (isAbsolute(p) ? p : join(base, p)) : join(base, 'database', 'database.sqlite'))
-    const source = resolve(mainDir, cfg.database)
-    // A path pointing into the main checkout must be re-pointed at the worktree copy.
-    const rel = cfg.database && isAbsolute(cfg.database) && cfg.database.startsWith(mainDir) ? relative(mainDir, cfg.database) : null
-    const target = rel ? join(worktree, rel) : resolve(worktree, cfg.database && !isAbsolute(cfg.database) ? cfg.database : '')
-    if (target === source) {
-      log('! SQLite path is outside the project; leaving it shared')
+    const source = sqlitePath(mainDir, cfg.database)
+    if (source === ':memory:') {
+      log('! SQLite is in-memory; nothing to provision')
       return null
     }
+    // The worktree gets the same relative location (database/database.sqlite by default).
+    const rel = relativeInside(mainDir, source)
+    if (rel === null) {
+      log(`! DB_DATABASE points outside the project (${source}); the change shares it`)
+      return null
+    }
+    const target = join(worktree, rel)
     mkdirSync(dirname(target), { recursive: true })
-    if (mode === 'clone' && existsSync(source)) copyFileSync(source, target)
-    else if (!existsSync(target)) writeFileSync(target, '')
-    if (cfg.database) setEnvKey(worktree, 'DB_DATABASE', target)
-    log(`✓ SQLite database ${mode === 'clone' && existsSync(source) ? 'copied' : 'created'} at ${relative(worktree, target)}`)
+    const copied = mode === 'clone' && existsSync(source)
+    if (copied) copyFileSync(source, target)
+    else writeFileSync(target, '')
+    // Always absolute: Laravel resolves a relative DB_DATABASE against the *current directory*,
+    // which differs between artisan, php -S, Herd/php-fpm and the agent's shell.
+    setEnvKey(worktree, 'DB_DATABASE', target)
+    if (!existsSync(target)) throw new Error(`Couldn’t create the SQLite file at ${target}`)
+    log(`✓ SQLite database ${copied ? 'copied' : 'created'} at ${relative(worktree, target)} (DB_DATABASE set to its full path)`)
     return { driver: 'sqlite', name: target, created: true }
   }
 
@@ -241,7 +294,7 @@ function setEnvKey(dir: string, key: string, value: string): void {
   if (!existsSync(f)) return
   const body = readFileSync(f, 'utf8')
   const re = new RegExp(`^${key}=.*$`, 'm')
-  const line = `${key}=${value}`
+  const line = `${key}=${/[\s#"']/.test(value) ? `"${value.replace(/"/g, '\\"')}"` : value}`
   writeFileSync(f, re.test(body) ? body.replace(re, () => line) : body.replace(/\n?$/, `\n${line}\n`))
 }
 
@@ -257,7 +310,10 @@ export async function ensureDatabase(dir: string): Promise<{ created: boolean; d
   const cfg = configFromEnv(readEnv(dir))
   if (!cfg) return null
   if (cfg.driver === 'sqlite') {
-    const file = cfg.database ? (isAbsolute(cfg.database) ? cfg.database : join(dir, cfg.database)) : join(dir, 'database', 'database.sqlite')
+    const file = sqlitePath(dir, cfg.database)
+    if (file === ':memory:') return { created: false, driver: 'sqlite' }
+    // A relative path only works from the project root; make it absolute so every runtime agrees.
+    if (cfg.database && !isAbsolute(cfg.database)) setEnvKey(dir, 'DB_DATABASE', file)
     if (existsSync(file)) return { created: false, driver: 'sqlite' }
     mkdirSync(dirname(file), { recursive: true })
     writeFileSync(file, '')

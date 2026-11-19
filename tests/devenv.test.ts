@@ -13,6 +13,7 @@ function laravelApp(): string {
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ scripts: { dev: 'vite', build: 'vite build' } }))
   writeFileSync(join(dir, 'package-lock.json'), '{}')
   writeFileSync(join(dir, '.nvmrc'), 'v22\n')
+  mkdirSync(join(dir, 'database', 'migrations'), { recursive: true })
   return dir
 }
 
@@ -23,7 +24,7 @@ describe('.spindle development environment', () => {
     expect(env.setup).toEqual(['composer install --no-interaction --prefer-dist --no-progress', 'npm ci --no-audit --no-fund', 'npm run build'])
     expect(env.processes.map((p) => p.name)).toEqual(['Dev server', 'Queue worker', 'Scheduler'])
     expect(env.runtime).toEqual({ node: '22' })
-    expect(env.database).toEqual({ mode: 'clone', migrate: true })
+    expect(env.database).toEqual({ mode: 'clone', migrate: true, seed: false })
     expect(env.commands).toContain('php artisan test')
     expect(devenv.runtimeHints(dir)).toEqual({ php: '8.2', node: '22' })
   })
@@ -65,7 +66,7 @@ describe('.spindle development environment', () => {
     expect(config.runtime.php).toBeUndefined() // numbers aren't versions
     expect(config.processes).toEqual([{ name: 'php artisan horizon', command: 'php artisan horizon', autoStart: true }])
     expect(config.setup).toEqual(base.setup)
-    expect(config.database).toEqual({ mode: 'clone', migrate: true })
+    expect(config.database).toEqual({ mode: 'clone', migrate: true, seed: false })
     expect(config.env).toEqual({ OK: '1' })
   })
 

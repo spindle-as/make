@@ -54,13 +54,13 @@ export function Button({
       {...rest}
       disabled={disabled || loading}
       className={clsx(
-        'no-drag inline-flex items-center justify-center gap-2 rounded-lg font-medium whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-45',
+        'press no-drag inline-flex items-center justify-center gap-2 rounded-lg font-medium whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/50',
         size === 'sm' && 'h-8 px-3 text-sm',
         size === 'md' && 'h-9 px-3.5 text-sm',
         size === 'lg' && 'h-11 px-5 text-base',
-        variant === 'primary' && 'bg-accent text-ink hover:bg-accent-strong',
-        variant === 'success' && 'bg-ok text-black hover:brightness-110',
-        variant === 'secondary' && 'border border-line-strong bg-raised text-fg hover:bg-hover',
+        variant === 'primary' && 'bg-accent text-ink shadow-sm hover:bg-accent-strong',
+        variant === 'success' && 'bg-ok text-ink shadow-sm hover:brightness-110',
+        variant === 'secondary' && 'border border-line-strong bg-raised text-fg shadow-xs hover:border-fg/20 hover:bg-hover',
         variant === 'ghost' && 'text-muted hover:bg-hover hover:text-fg',
         variant === 'danger' && 'border border-bad/40 bg-bad/10 text-bad hover:bg-bad/20',
         className
@@ -90,7 +90,7 @@ export function IconButton({
       title={label}
       aria-label={title}
       className={clsx(
-        'no-drag inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-40',
+        'press no-drag inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-fg disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/50',
         active && 'bg-hover text-fg',
         className
       )}
@@ -105,7 +105,7 @@ export function Input({ className, ...rest }: ComponentProps<'input'>) {
     <input
       {...rest}
       className={clsx(
-        'h-9 w-full rounded-lg border border-line-strong bg-bg/60 px-3 text-sm text-fg placeholder:text-faint outline-none focus:border-accent disabled:opacity-60',
+        'h-9 w-full rounded-lg border border-line-strong bg-bg/60 px-3 text-sm text-fg placeholder:text-faint outline-none transition-[border-color,box-shadow] focus:border-info/60 focus:ring-3 focus:ring-info/15 disabled:opacity-60',
         className
       )}
     />
@@ -117,7 +117,7 @@ export function Textarea({ className, ...rest }: ComponentProps<'textarea'>) {
     <textarea
       {...rest}
       className={clsx(
-        'w-full resize-none rounded-lg border border-line-strong bg-bg/60 px-3 py-2 text-sm text-fg placeholder:text-faint outline-none focus:border-accent',
+        'w-full resize-none rounded-lg border border-line-strong bg-bg/60 px-3 py-2 text-sm text-fg placeholder:text-faint outline-none transition-[border-color,box-shadow] focus:border-info/60 focus:ring-3 focus:ring-info/15',
         className
       )}
     />
@@ -128,7 +128,7 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
   return (
     <select
       {...rest}
-      className={clsx('h-9 rounded-lg border border-line-strong bg-bg/60 px-2.5 text-sm text-fg outline-none focus:border-accent', className)}
+      className={clsx('h-9 rounded-lg border border-line-strong bg-bg/60 px-2.5 text-sm text-fg outline-none transition-[border-color,box-shadow] focus:border-info/60 focus:ring-3 focus:ring-info/15', className)}
     >
       {children}
     </select>
@@ -183,7 +183,7 @@ export function Badge({
         tone === 'warn' && 'bg-warn/15 text-warn',
         tone === 'bad' && 'bg-bad/15 text-bad',
         tone === 'info' && 'bg-info/15 text-info',
-        tone === 'accent' && 'bg-accent/15 text-accent-strong',
+        tone === 'accent' && 'bg-active text-fg',
         className
       )}
     >
@@ -229,9 +229,9 @@ export function Segmented<T extends string>({
           title={o.title}
           onClick={() => onChange(o.value)}
           className={clsx(
-            'no-drag flex items-center gap-1.5 rounded-md font-medium transition-colors',
+            'press no-drag flex items-center gap-1.5 rounded-md font-medium',
             size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-8 px-3 text-sm',
-            o.value === value ? 'bg-active text-fg shadow-sm' : 'text-muted hover:text-fg'
+            o.value === value ? 'bg-bg text-fg shadow-sm ring-1 ring-line-strong' : 'text-muted hover:text-fg'
           )}
         >
           {o.label}
@@ -302,7 +302,7 @@ export function OptionList<T extends string>({
           )}
         >
           <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-            {o.value === value && <Check className="size-4 text-accent-strong" />}
+            {o.value === value && <Check className="size-4 text-fg" />}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium text-fg">{o.label}</span>

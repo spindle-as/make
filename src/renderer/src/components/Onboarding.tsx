@@ -67,10 +67,10 @@ export function Onboarding() {
                   onClick={() => void save({ mode: o.mode })}
                   className={clsx(
                     'flex flex-col gap-1.5 rounded-2xl border p-4 text-left transition-colors',
-                    settings?.mode === o.mode ? 'border-accent bg-accent/10' : 'border-line-strong bg-panel hover:border-accent/50'
+                    settings?.mode === o.mode ? 'border-fg/50 bg-active' : 'border-line-strong bg-panel hover:border-fg/30'
                   )}
                 >
-                  <span className={clsx('flex items-center gap-2 text-base font-medium', settings?.mode === o.mode && 'text-accent')}>
+                  <span className={clsx('flex items-center gap-2 text-base font-medium', settings?.mode === o.mode && 'text-fg')}>
                     {o.icon} {o.title}
                   </span>
                   <span className="text-sm text-muted">{o.text}</span>
