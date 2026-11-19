@@ -4,6 +4,8 @@ All notable changes to Spindle Make. `npm run release` moves the **Unreleased** 
 
 ## Unreleased
 
+## v0.1.3 — 2026-11-19
+
 - **Fixed: SQLite databases that "didn't exist"** although Spindle said it created them. Changes sharing the main database now point at the main checkout's file (they pointed at a missing file inside the worktree), and every change's `.env` gets the database's full path, so artisan, the preview server, Herd and the AI all open the same file. Re-run setup on an existing change to fix it.
 - **Smarter setup**: Spindle works out what a project needs and in which order — dependencies and build, then migrations, sample data for new databases (when the seeders do something), then things like `storage:link` or Passport keys. It follows Laravel 12's `composer setup` script and suggests commands it finds in the README, Makefile or `bin/setup`. **Detect with AI** has Claude read the project (read-only) and propose the setup for you to review.
 - **Exact models**: pick a specific Claude version (Opus 5.5, Sonnet 5.5, Fable 5.2, Opus 4.8 …) or type any model ID; aliases still follow the latest. Optional fallback model in Settings → Agents.
