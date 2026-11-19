@@ -386,3 +386,142 @@ webview {
 .menu-in {
   animation: menu-in 160ms cubic-bezier(0.2, 0, 0, 1) both;
 }
+
+/* While a pane is being resized, previews must not swallow the drag. */
+.resizing webview,
+.resizing iframe {
+  pointer-events: none;
+}
+.resizing {
+  user-select: none;
+}
+
+/* ---- magic: a neon rainbow that lives around the message box ---- */
+@property --magic-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+:root {
+  --magic: conic-gradient(from var(--magic-angle), #ff4fd8, #8b5cff, #2ee6ff, #3dffa8, #ffd23d, #ff7a3d, #ff4fd8);
+  --magic-line: linear-gradient(90deg, #ff4fd8, #8b5cff, #2ee6ff, #3dffa8, #ffd23d, #ff7a3d);
+}
+@keyframes magic-spin {
+  to {
+    --magic-angle: 360deg;
+  }
+}
+@keyframes magic-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  20% {
+    opacity: 0.95;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.07);
+  }
+}
+/* Wrap the box: the ring (::before) and its glow (::after) sit behind it. */
+.magic {
+  position: relative;
+  isolation: isolate;
+  border-radius: 28px;
+}
+.magic::before,
+.magic::after {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+  background: var(--magic);
+  animation: magic-spin 5s linear infinite;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.magic::after {
+  inset: -3px;
+  filter: blur(20px);
+}
+.magic:focus-within::before {
+  opacity: 0.45;
+}
+.magic[data-working='true']::before {
+  opacity: 1;
+  animation-duration: 2.6s;
+}
+.magic[data-working='true']::after {
+  opacity: 0.32;
+  animation-duration: 2.6s;
+}
+.magic[data-burst='true']::before {
+  opacity: 1;
+}
+.magic[data-burst='true']::after {
+  animation:
+    magic-spin 1.1s linear infinite,
+    magic-burst 1.1s cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+/* The send button glows on hover. */
+.magic-send:not(:disabled):hover {
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, #8b5cff 55%, transparent),
+    0 0 22px -2px color-mix(in oklab, #8b5cff 70%, transparent),
+    0 0 34px -6px color-mix(in oklab, #2ee6ff 60%, transparent);
+}
+
+/* A message you just sent arrives with a short neon glow. */
+@keyframes sent-glow {
+  0% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  30% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, #8b5cff 60%, transparent),
+      0 0 28px -4px color-mix(in oklab, #ff4fd8 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.sent-glow {
+  animation: sent-glow 1.4s ease-out both;
+}
+
+/* Headlines with a slow aurora sweep. */
+@keyframes aurora {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+.magic-title {
+  background: linear-gradient(90deg, var(--color-fg) 0%, #c4b5ff 30%, #8fefff 50%, #ffb8ee 70%, var(--color-fg) 100%);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: aurora 10s ease-in-out infinite;
+}
+
+/* Indeterminate progress in rainbow. */
+.magic-progress {
+  background: var(--magic-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .magic::before,
+  .magic::after,
+  .magic-title {
+    animation: none !important;
+  }
+}

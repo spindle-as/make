@@ -165,9 +165,7 @@ export function DataPanel({ feature }: { feature: Feature }) {
                 <Grid result={result} />
               </>
             ) : (
-              <Empty icon={<Table2 className="size-7" />} title="Pick a table">
-                Browse the data your app is using right now.
-              </Empty>
+              <Empty icon={<Table2 className="size-7" />} title="Pick a table" />
             )}
           </div>
         </div>

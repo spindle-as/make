@@ -227,9 +227,7 @@ export function TerminalPanel({ feature, project }: { feature: Feature; project:
       {current ? (
         <LogView key={current.id} proc={current} feature={feature} />
       ) : (
-        <Empty icon={<Terminal className="size-7" />} title="Nothing running">
-          Start a service above or run a command below. Commands run in {feature.worktreePath}.
-        </Empty>
+        <Empty icon={<Terminal className="size-7" />} title="Nothing running" />
       )}
 
       <form

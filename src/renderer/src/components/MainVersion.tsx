@@ -115,7 +115,6 @@ export function MainVersion({
             </span>
           )}
           <div className="flex-1" />
-          <span className="hidden truncate text-faint xl:inline">Point at what should change — each note starts the change with a screenshot.</span>
           <IconButton title="Check for updates and reload" className="size-7" onClick={() => void load()}>
             <RefreshCw className={loading ? 'size-3.5 animate-spin' : 'size-3.5'} />
           </IconButton>

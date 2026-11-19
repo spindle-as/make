@@ -4,6 +4,13 @@ All notable changes to Spindle Make. `npm run release` moves the **Unreleased** 
 
 ## Unreleased
 
+- **New changes are ready in seconds**: setup no longer installs everything from scratch. When a change's lockfile matches what's already installed (in the main checkout or an earlier change), `vendor/` and `node_modules/` are cloned copy-on-write in a fraction of a second, without using extra disk space. Identical builds are reused too, and the database, PHP packages and JavaScript packages are prepared at the same time. On the demo project: about 12s before, 0.7s now.
+- **Faster database copies**: SQLite files are cloned instantly, Postgres copies on the server when it can, and MySQL restores skip per-row checks.
+- **Resizable panes**: drag the edge of the sidebar, the side panel or the live preview (or focus it and use the arrow keys; double-click resets). Widths are remembered.
+- **A bit of magic**: a neon rainbow ring around the message box that lights up while the agent works and bursts when you send.
+- **Fewer words**: subtitles, hints and explanations removed across the app.
+- Smaller, faster-loading app (the interface code is a third of its old size; dialogs and side views load when first opened).
+
 ## v0.1.4 — 2026-11-19
 
 - **Simpler, calmer interface** (following Google's Material 3 guidelines): one clear main action per area, quiet surfaces instead of outlines, pill-shaped buttons with bigger click targets, stronger text contrast and a clear keyboard focus ring everywhere.

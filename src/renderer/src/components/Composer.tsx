@@ -82,7 +82,6 @@ function AgentSettings({
     onChange({ model, effort: keep ? cfg.effort : '' })
   }
   const effortOptions = [{ value: '', label: 'Default' }, ...efforts.map((e) => ({ value: e.id, label: e.label }))]
-  const currentEffort = efforts.find((e) => e.id === (cfg.effort || selected?.defaultEffort))
   const perm = PERMISSIONS.find((p) => p.value === cfg.permissionMode) ?? PERMISSIONS[2]
   const option = (m: ModelOption) => ({ value: m.id, label: m.label, description: m.description })
 
@@ -90,7 +89,7 @@ function AgentSettings({
     <Popover open={open} onClose={onClose} className="max-h-[min(640px,75vh)] w-[440px] overflow-y-auto p-4" placement={placement}>
       <div role="group" aria-label="Agent settings" className="flex flex-col gap-5">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold">Agent settings</h2>
+          <h2 className="text-base font-semibold">Agent</h2>
           <Segmented<AgentKind>
             size="sm"
             value={cfg.agent}
@@ -145,16 +144,15 @@ function AgentSettings({
         {efforts.length > 0 && (
           <section aria-labelledby="as-effort">
             <h3 id="as-effort" className="mb-1.5 text-sm font-medium text-muted">
-              Thinking effort
+              Effort
             </h3>
             <Segmented size="sm" value={cfg.effort} onChange={(effort) => onChange({ effort })} options={effortOptions} className="flex-wrap" />
-            {currentEffort?.description && <p className="mt-1.5 text-xs text-muted">{currentEffort.description}</p>}
           </section>
         )}
 
         <section aria-labelledby="as-perm">
           <h3 id="as-perm" className="mb-1.5 text-sm font-medium text-muted">
-            What it may do on its own
+            Permissions
           </h3>
           <Select aria-labelledby="as-perm" value={cfg.permissionMode} onChange={(e) => onChange({ permissionMode: e.target.value as PermissionMode })} className="w-full">
             {PERMISSIONS.map((p) => (
@@ -163,17 +161,14 @@ function AgentSettings({
               </option>
             ))}
           </Select>
-          <p className={clsx('mt-1.5 text-xs', cfg.permissionMode === 'bypassPermissions' ? 'text-warn' : 'text-muted')}>{perm.description}</p>
+          {cfg.permissionMode === 'bypassPermissions' && <p className="mt-1.5 text-xs text-warn">{perm.description}</p>}
         </section>
 
         {cfg.agent === 'claude' && (
           <section className="flex flex-col gap-3">
-            <Toggle checked={goal} onChange={setGoal} label="Goal mode" hint="Your next message becomes a goal: Claude keeps working until it’s done and checked." />
+            <Toggle checked={goal} onChange={setGoal} label="Goal mode — keep going until done" />
             <label className="flex items-center justify-between gap-3 text-sm">
-              <span>
-                Spend limit per message
-                <span className="block text-xs text-muted">Stops the turn when it would cost more.</span>
-              </span>
+              <span>Spend limit per message</span>
               <span className="relative">
                 <span className="absolute top-1/2 left-3 -translate-y-1/2 text-muted">$</span>
                 <Input
@@ -197,8 +192,8 @@ function AgentSettings({
               <div className="flex items-center gap-2">
                 <span className="min-w-0 flex-1">
                   {harness.agent === 'claude'
-                    ? `${harness.skills} skills, ${harness.agents.length} subagents${harness.mcpServers.length ? `, ${harness.mcpServers.length} connected tool${harness.mcpServers.length > 1 ? 's' : ''}` : ''}. Type / for commands, @ for a subagent.`
-                    : `${harness.commands.length} custom prompts. Type / to use one.`}
+                    ? `${harness.skills} skills · ${harness.agents.length} subagents${harness.mcpServers.length ? ` · ${harness.mcpServers.length} MCP` : ''}`
+                    : `${harness.commands.length} prompts`}
                 </span>
                 <button type="button" aria-expanded={details} onClick={() => setDetails(!details)} className="shrink-0 rounded-full px-2 py-1 font-medium text-fg hover:bg-active">
                   {details ? 'Hide' : 'Details'}
@@ -210,7 +205,7 @@ function AgentSettings({
                 <HarnessDetails harness={harness} />
               </div>
             )}
-            {!!costUsd && <div className={clsx(harness && 'mt-2')}>This thread has cost ${costUsd.toFixed(2)} so far.</div>}
+            {!!costUsd && <div className={clsx(harness && 'mt-2')}>${costUsd.toFixed(2)} spent</div>}
           </section>
         )}
       </div>
@@ -254,6 +249,13 @@ export function Composer({
 }) {
   const [text, setText] = useState('')
   const [goal, setGoal] = useState(false)
+  // A short neon burst around the box every time something is sent.
+  const [burst, setBurst] = useState(0)
+  useEffect(() => {
+    if (!burst) return
+    const t = setTimeout(() => setBurst(0), 1100)
+    return () => clearTimeout(t)
+  }, [burst])
   const harness = useHarness(projectId, cfg.agent)
   const menu = useMenuItems(text, harness)
   const [menuIndex, setMenuIndex] = useState(0)
@@ -288,6 +290,7 @@ export function Composer({
     // Goal mode sends Claude Code's native /goal: it keeps working until the goal is met.
     const prompt = goal && cfg.agent === 'claude' && !typed.startsWith('/') ? `/goal ${typed}` : typed
     setText('')
+    setBurst(Date.now())
     const ok = await onSubmit(prompt)
     if (ok === false) setText(typed)
     else setGoal(false)
@@ -345,6 +348,7 @@ export function Composer({
         </div>
       )}
       {header && <div className="mb-2 flex flex-wrap items-center gap-2">{header}</div>}
+      <div className="magic" data-working={running} data-burst={!!burst}>
       <div className={clsx('rounded-[28px] border bg-raised transition-colors', 'border-line focus-within:border-line-strong')}>
         {goal && cfg.agent === 'claude' && (
           <div className="px-4 pt-3">
@@ -448,12 +452,13 @@ export function Composer({
               disabled={!text.trim()}
               title="Send (↵)"
               aria-label="Send"
-              className="press flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-ink hover:bg-accent-strong disabled:bg-hover disabled:text-muted"
+              className="magic-send press flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-ink hover:bg-accent-strong disabled:bg-hover disabled:text-muted"
             >
               <ArrowUp className="size-5" strokeWidth={2.25} />
             </button>
           )}
         </div>
+      </div>
       </div>
     </div>
   )

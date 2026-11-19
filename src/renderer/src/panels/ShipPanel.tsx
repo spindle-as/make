@@ -156,7 +156,6 @@ export function ShipPanel({ feature, project }: { feature: Feature; project: Pro
   return (
     <div className="h-full overflow-y-auto px-6 pt-2 pb-6">
       <div className="-mt-2 mb-2 flex items-center gap-2">
-        <div className="text-sm text-muted">Checks, pull request, CI and deploy for this change.</div>
         <div className="flex-1" />
         <IconButton title="Refresh" onClick={refresh}>
           {loading ? <Spinner /> : <RefreshCw className="size-4" />}

@@ -610,3 +610,71 @@ export function Menu({
     </div>
   )
 }
+
+/**
+ * Drag handle on the edge of a resizable pane. Drag it, use ←/→ when it has focus (Shift for big
+ * steps), or double-click to go back to the default width.
+ */
+export function ResizeHandle({
+  edge,
+  value,
+  min,
+  max,
+  fallback,
+  onChange,
+  label
+}: {
+  /** which edge of the pane the handle sits on */
+  edge: 'left' | 'right'
+  value: number
+  min: number
+  max: number
+  /** width a double-click returns to */
+  fallback: number
+  onChange: (width: number) => void
+  label: string
+}) {
+  const [dragging, setDragging] = useState(false)
+  const start = useRef({ x: 0, w: 0 })
+  const clamp = (w: number) => Math.round(Math.min(max, Math.max(min, w)))
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      aria-valuenow={value}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      tabIndex={0}
+      title={`${label} — drag, or double-click to reset`}
+      onPointerDown={(e) => {
+        e.preventDefault()
+        ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+        start.current = { x: e.clientX, w: value }
+        setDragging(true)
+        document.body.style.cursor = 'col-resize'
+        document.body.classList.add('resizing')
+      }}
+      onPointerMove={(e) => {
+        if (!dragging) return
+        const dx = e.clientX - start.current.x
+        onChange(clamp(start.current.w + (edge === 'right' ? dx : -dx)))
+      }}
+      onPointerUp={() => {
+        setDragging(false)
+        document.body.style.cursor = ''
+        document.body.classList.remove('resizing')
+      }}
+      onDoubleClick={() => onChange(clamp(fallback))}
+      onKeyDown={(e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+        e.preventDefault()
+        const step = (e.shiftKey ? 64 : 16) * (e.key === 'ArrowRight' ? 1 : -1) * (edge === 'right' ? 1 : -1)
+        onChange(clamp(value + step))
+      }}
+      className={clsx('group no-drag absolute top-0 z-30 flex h-full w-3 cursor-col-resize justify-center outline-none', edge === 'right' ? '-right-1.5' : '-left-1.5')}
+    >
+      <span className={clsx('h-full w-0.5 rounded-full transition-colors', dragging ? 'bg-focus' : 'bg-transparent group-hover:bg-line-strong group-focus-visible:bg-focus')} />
+    </div>
+  )
+}

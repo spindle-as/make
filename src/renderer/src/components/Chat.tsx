@@ -220,14 +220,14 @@ function CreatorSetupCard({ item, lines }: { item: ChatItem; lines: string[] }) 
           <div className={clsx('h-full rounded-full transition-[width] duration-700', item.status === 'ok' ? 'bg-ok' : 'bg-info')} style={{ width: `${pct}%` }} />
         </div>
       )}
-      <p className="mt-2 text-sm text-muted">
+      <p className="mt-2 text-sm text-muted empty:hidden">
         {item.status === 'running'
-          ? `${current ? friendlyStep(current).replace(/^./, (c) => c.toUpperCase()) : 'Starting'}… This takes a minute the first time.`
+          ? `${current ? friendlyStep(current).replace(/^./, (c) => c.toUpperCase()) : 'Starting'}…`
           : failed
-            ? 'Claude can usually fix this for you.'
+            ? ''
             : needsOk
-              ? 'One last step: allow your team’s setup below, and Spindle finishes getting your copy ready.'
-              : 'It has its own website, data and email inbox — nothing you do here affects the real thing. Try it, or describe what to build.'}
+              ? 'Allow your team’s setup below to finish.'
+              : ''}
       </p>
       {failed && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -366,7 +366,7 @@ const Message = memo(function Message({ item, steps, plan }: { item: ChatItem; s
     case 'user':
       return (
         <div className="rise-in flex justify-end">
-          <div className="selectable max-w-[85%] rounded-3xl rounded-br-lg bg-active px-4 py-2.5 text-base leading-relaxed whitespace-pre-wrap">{item.text}</div>
+          <div className={clsx('selectable max-w-[85%] rounded-3xl rounded-br-lg bg-active px-4 py-2.5 text-base leading-relaxed whitespace-pre-wrap', Date.now() - item.ts < 3000 && 'sent-glow')}>{item.text}</div>
         </div>
       )
     case 'assistant':

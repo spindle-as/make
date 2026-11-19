@@ -80,11 +80,6 @@ export function TurnStatus({ feature }: { feature: Feature }) {
         tone="warn"
         icon={<Hand className="size-4" />}
         title={planReady ? 'The plan is ready' : 'Waiting for you'}
-        detail={
-          planReady
-            ? `${agent} finished planning — review the plan above and approve it, or say what to change.`
-            : `${agent} asked ${requests === 1 ? 'a question or for permission' : `${requests} questions or permissions`} — answer above to let it continue.`
-        }
         actions={<Action onClick={() => document.querySelector('[data-request-card]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>Show me</Action>}
       />
     )
@@ -148,7 +143,6 @@ export function TurnStatus({ feature }: { feature: Feature }) {
         icon={<CheckCircle2 className="size-4" />}
         title="Your turn"
         meta={finished}
-        detail="Ask a follow-up — or turn this into a change when you’re ready to build."
         actions={
           feature.projectId ? (
             <Action icon={<ArrowRight className="size-3.5" />} onClick={() => void runAction('promote')}>
@@ -170,15 +164,9 @@ export function TurnStatus({ feature }: { feature: Feature }) {
         <Bar
           tone="ok"
           icon={<CheckCircle2 className="size-4" />}
-          title="Done — your turn"
+          title="Your turn"
           meta={finished}
-          detail={
-            checks?.running
-              ? 'Checks are running — keep testing meanwhile.'
-              : failedChecks
-                ? `${failedChecks} check${failedChecks > 1 ? 's' : ''} need fixing — open ${w.checkAndSubmit} and use Fix with AI.`
-                : 'Try it out. Something off? Point at it in the preview, or describe it below.'
-          }
+          detail={checks?.running ? 'Checks running…' : failedChecks ? `${failedChecks} check${failedChecks > 1 ? 's' : ''} failed` : undefined}
           actions={
             <>
               {feature.localUrl && (
@@ -199,7 +187,6 @@ export function TurnStatus({ feature }: { feature: Feature }) {
           tone="info"
           icon={<CheckCircle2 className="size-4" />}
           title="Submitted"
-          detail="Waiting for review and the automatic checks. You can still ask for changes — they’re added to the same review."
           actions={<Action onClick={() => setTab('ship')}>See status</Action>}
         />
       )
@@ -209,7 +196,6 @@ export function TurnStatus({ feature }: { feature: Feature }) {
           tone="ok"
           icon={<CheckCircle2 className="size-4" />}
           title={w.stages.merged}
-          detail="It’s in the main version of the project."
           actions={
             <Action icon={<Rocket className="size-3.5" />} onClick={() => setTab('ship')}>
               {w.deploy}
@@ -223,7 +209,6 @@ export function TurnStatus({ feature }: { feature: Feature }) {
           tone="ok"
           icon={<Rocket className="size-4" />}
           title="Live"
-          detail="This change is out. Keep an eye on it, or start the next one."
           actions={
             <Action primary onClick={() => useStore.getState().startNew('feature', feature.projectId)}>
               {w.newFeature}
@@ -285,7 +270,7 @@ function Bar({
       {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
       {progress && (
         <span className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden" aria-hidden>
-          <span className="block h-full w-1/3 bg-info" style={{ animation: 'indeterminate 1.4s ease-in-out infinite' }} />
+          <span className="magic-progress block h-full w-1/3" style={{ animation: 'indeterminate 1.4s ease-in-out infinite' }} />
         </span>
       )}
     </div>

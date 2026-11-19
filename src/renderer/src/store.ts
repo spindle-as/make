@@ -59,6 +59,8 @@ interface State {
   rightTab: RightTab
   rightOpen: boolean
   sidebarOpen: boolean
+  sidebarWidth: number
+  setSidebarWidth(w: number): void
   modal: Modal
   modelPickerOpen: boolean
   /** app self-update state */
@@ -93,7 +95,7 @@ interface State {
 }
 
 let toastId = 0
-const LS = { selected: 'sf.selectedFeature', right: 'sf.rightOpen', sidebar: 'sf.sidebarOpen', draft: 'sf.draft', unseen: 'sf.unseen' }
+const LS = { selected: 'sf.selectedFeature', right: 'sf.rightOpen', sidebar: 'sf.sidebarOpen', sidebarWidth: 'sf.sidebarWidth', draft: 'sf.draft', unseen: 'sf.unseen' }
 const read = <T,>(k: string, d: T): T => {
   try {
     const v = localStorage.getItem(k)
@@ -133,6 +135,7 @@ export const useStore = create<State>((set, get) => ({
   rightTab: 'preview',
   rightOpen: read(LS.right, true),
   sidebarOpen: read(LS.sidebar, true),
+  sidebarWidth: read(LS.sidebarWidth, 272),
   modal: null,
   modelPickerOpen: false,
   update: null,
@@ -301,6 +304,11 @@ export const useStore = create<State>((set, get) => ({
   toggleRight() {
     set({ rightOpen: !get().rightOpen })
     write(LS.right, get().rightOpen)
+  },
+
+  setSidebarWidth(w) {
+    set({ sidebarWidth: w })
+    write(LS.sidebarWidth, w)
   },
 
   toggleSidebar() {

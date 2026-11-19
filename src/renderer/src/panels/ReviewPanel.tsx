@@ -71,7 +71,7 @@ export function ChecksSection({ feature }: { feature: Feature }) {
               ? `Check ${Math.min(done + 1, plan.length)} of ${plan.length} · ${fmt(now - (live?.startedAt ?? now))} so far${Number.isFinite(remainingEstimate) ? ` · about ${fmt(remainingEstimate)} left` : ''}`
               : live?.cancelled
                 ? `Stopped after ${done} of ${plan.length}.`
-                : 'Runs the project’s tests and quality checks on this change. You can keep working while they run.'}
+                : ''}
           </div>
         </div>
         {running ? (
@@ -290,7 +290,7 @@ export function ReviewPanel({ feature, project }: { feature: Feature; project: P
             <span className="flex size-7 items-center justify-center rounded-full bg-hover text-sm font-semibold">2</span>
             <div className="min-w-0 flex-1">
               <div className="text-base font-medium">{w.submit}</div>
-              <div className="text-sm text-muted">{pr ? 'Submitted — an engineer reviews it on GitHub.' : 'Spindle writes a clear description of what changed, with the check results.'}</div>
+              {pr && <div className="text-sm text-muted">Submitted for review</div>}
             </div>
             {!pr && !draft && (
               <Button variant="primary" icon={<Sparkles className="size-4" />} loading={drafting} onClick={prepare}>

@@ -144,7 +144,6 @@ export function CommandMenu({
           </div>
         ))}
       </div>
-      <div className="border-t border-line px-4 py-2 text-xs text-muted">↑↓ to choose · ↵ to pick · Esc to close</div>
     </div>
   )
 }

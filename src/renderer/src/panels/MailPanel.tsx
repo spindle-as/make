@@ -61,9 +61,7 @@ export function MailPanel({ feature }: { feature: Feature }) {
         </IconButton>
       </div>
       {list.length === 0 ? (
-        <Empty icon={<Inbox className="size-8" />} title="No emails yet">
-          When the app sends an email — a welcome mail, a password reset, a notification — it shows up here instantly so you can check it.
-        </Empty>
+        <Empty icon={<Inbox className="size-8" />} title="No emails yet" />
       ) : (
         <div className="flex min-h-0 flex-1">
           <ul className="w-[42%] shrink-0 overflow-y-auto border-r border-line">

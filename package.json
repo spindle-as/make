@@ -24,8 +24,8 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
-    "dist": "npm run build && electron-builder --mac --arm64 --publish never",
-    "dist:dir": "npm run build && electron-builder --mac --arm64 --dir",
+    "dist": "npm run build && node scripts/build-helpers.mjs && electron-builder --mac --arm64 --publish never",
+    "dist:dir": "npm run build && node scripts/build-helpers.mjs && electron-builder --mac --arm64 --dir",
     "icon": "electron scripts/make-icon.cjs",
     "release": "node scripts/release.mjs"
   },
@@ -93,6 +93,15 @@
       "artifactName": "Spindle-Make-${version}-${arch}.${ext}"
     },
     "copyright": "Copyright © 2026 Spindle",
-    "publish": null
+    "publish": null,
+    "extraResources": [
+      {
+        "from": "build/helpers",
+        "to": "bin",
+        "filter": [
+          "clonedir"
+        ]
+      }
+    ]
   }
 }

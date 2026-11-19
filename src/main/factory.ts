@@ -52,6 +52,7 @@ import * as devenv from './devenv'
 import { AUTH_SCRIPT, runAuthScript, type AuthUser } from './laravelAuth'
 import { expandCodexPrompt, harnessView } from './harness'
 import { detectSetup, seederDoesSomething, setupContextFiles } from './detect'
+import * as fast from './fastsetup'
 import { listNode, listPhp, pick as pickRuntime, resolveRuntime, type ResolvedRuntime } from './runtimes'
 import { environmentFromSite, PloiClient, scoreSites } from './ploi'
 import { store } from './store'
@@ -96,7 +97,12 @@ export class Factory {
   readonly deploys: DeployTracker
   private deployRefreshTimer: NodeJS.Timeout | null = null
 
+  /** copy-on-write cache of dependency folders and builds (see fastsetup.ts) */
+  private setupCache = new fast.SetupCache(join(app.getPath('userData'), 'cache', 'setup'))
+
   constructor(private emit: Emit) {
+    // Find or build the one-call folder cloner in the background, so the first setup can use it.
+    void fast.ensureCloneHelper([join(process.resourcesPath ?? '', 'bin', 'clonedir')], join(app.getPath('userData'), 'bin'))
     this.ca = new LocalCA(join(app.getPath('userData'), 'certs'))
     this.web = new WebServer(this.ca, { ensureBackend: (site) => this.ensureSiteBackend(site) })
     this.mail = new MailCatcher(join(app.getPath('userData'), 'mail'), {
@@ -1026,81 +1032,175 @@ export class Factory {
           log(`✓ Using existing Herd site ${site.url}`)
         }
       }
-      // 3. Own database (DBngin MySQL/Postgres, or a separate SQLite file)
-      const dbMode = r.config.database.mode
-      if (!f.inPlace && dbMode !== 'shared' && !store().feature(featureId).database) {
-        card('running', dbMode === 'clone' ? 'Cloning the database' : 'Creating a database')
-        try {
-          const created = await db.provision(p.path, f.worktreePath, db.featureDbName(p.slug, f.slug), dbMode, log)
-          if (created) {
-            f = store().feature(featureId)
-            this.saveFeature({ ...f, database: created })
-            step(`✓ Own database ${created.driver === 'sqlite' ? '(SQLite file)' : created.name}`)
-          }
-        } catch (e) {
-          log(`✗ Database: ${(e as Error).message}`)
-          step(`✗ Database: ${(e as Error).message}`)
-        }
-      } else if (!f.inPlace && dbMode === 'shared') {
-        // Sharing SQLite means using the main checkout's file — the worktree has none of its own.
-        const shared = db.shareSqlite(p.path, f.worktreePath)
-        if (shared) {
-          log(`✓ Uses the main SQLite database at ${shared}`)
-          step('✓ Shares the main database')
-        }
-      }
-      // 4. Setup steps from .spindle/config.json (composer install, npm ci, …), one at a time
+      // 3–6, as fast as possible: the database, PHP packages and JavaScript packages are prepared at
+      // the same time, builds start as soon as the JavaScript packages are in, and dependency folders
+      // and builds are cloned (copy-on-write) instead of rebuilt whenever an identical one exists.
       if (!f.inPlace) {
         f = store().feature(featureId)
-        for (const step0 of r.config.setup) {
-          let cmd = step0
+        const wt = f.worktreePath
+        const t0 = Date.now()
+        const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`
+        const active = new Set<string>()
+        const doing = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
+          active.add(label)
+          card('running', [...active].join(' · '))
+          try {
+            return await fn()
+          } finally {
+            active.delete(label)
+            card('running', [...active].join(' · ') || undefined)
+          }
+        }
+        const cmdEnv = { ...runEnv, SF_MAIN_REPO: p.path, SF_WORKTREE: wt, SF_BRANCH: f.branch, SF_URL: f.localUrl ?? '', SF_FEATURE: f.slug, CI: '1' }
+        const adjust = (cmd: string) => {
+          let c = cmd
           // `npm ci` needs a committed lockfile; a branch without one gets a normal install instead of a failure.
-          if (/^npm ci\b/.test(cmd) && !existsSync(join(f.worktreePath, 'package-lock.json'))) {
-            cmd = cmd.replace(/^npm ci\b/, 'npm install')
+          if (/^npm ci\b/.test(c) && !existsSync(join(wt, 'package-lock.json'))) {
+            c = c.replace(/^npm ci\b/, 'npm install')
             log('No package-lock.json in this branch — using npm install instead of npm ci')
           }
-          log(`$ ${cmd}`)
-          card('running', devenv.setupLabel(cmd))
-          const code = await this.streamSetupCommand(featureId, cmd, f.worktreePath, {
-            ...runEnv,
-            SF_MAIN_REPO: p.path,
-            SF_WORKTREE: f.worktreePath,
-            SF_BRANCH: f.branch,
-            SF_URL: f.localUrl ?? '',
-            SF_FEATURE: f.slug,
-            CI: '1'
-          })
+          // Use the local package cache first instead of asking the registry about every package.
+          if (/^npm (ci|install|i)\b/.test(c) && !/--prefer-(offline|online)/.test(c)) c += ' --prefer-offline'
+          // Without a committed lockfile, don't write one: it would show up as a change nobody made.
+          if (/^npm (install|i)\b/.test(c) && !existsSync(join(wt, 'package-lock.json')) && !/--no-package-lock/.test(c)) c += ' --no-package-lock'
+          return c
+        }
+        const runCmd = async (cmd: string, env: Record<string, string> = cmdEnv): Promise<boolean> => {
+          const c = adjust(cmd)
+          log(`$ ${c}`)
+          const started = Date.now()
+          const code = await doing(devenv.setupLabel(c), () => this.streamSetupCommand(featureId, c, wt, env))
           if (code !== 0) {
+            log(`✗ ${c} exited with code ${code}`)
+            step(`✗ ${devenv.setupLabel(c)} failed (exit ${code}) — see the Setup tab`)
+            return false
+          }
+          step(`✓ ${devenv.setupLabel(c, true)} (${secs(Date.now() - started)})`)
+          return true
+        }
+
+        // Own database (DBngin MySQL/Postgres, or a separate SQLite file)
+        const database = async () => {
+          const dbMode = r.config.database.mode
+          if (dbMode !== 'shared' && !store().feature(featureId).database) {
+            await doing(dbMode === 'clone' ? 'Copying the database' : 'Creating a database', async () => {
+              const started = Date.now()
+              try {
+                const created = await db.provision(p.path, wt, db.featureDbName(p.slug, f.slug), dbMode, log)
+                if (created) {
+                  this.saveFeature({ ...store().feature(featureId), database: created })
+                  step(`✓ Own database ${created.driver === 'sqlite' ? '(SQLite file)' : created.name} (${secs(Date.now() - started)})`)
+                }
+              } catch (e) {
+                log(`✗ Database: ${(e as Error).message}`)
+                step(`✗ Database: ${(e as Error).message}`)
+              }
+            })
+          } else if (dbMode === 'shared') {
+            // Sharing SQLite means using the main checkout's file — the worktree has none of its own.
+            const shared = db.shareSqlite(p.path, wt)
+            if (shared) {
+              log(`✓ Uses the main SQLite database at ${shared}`)
+              step('✓ Shares the main database')
+            }
+          }
+        }
+
+        // Dependencies: clone an identical installed folder when there is one, install otherwise.
+        const install = async (cmd: string): Promise<boolean> => {
+          const kind = fast.installKind(cmd)!
+          const dst = join(wt, kind.dir)
+          const hash = fast.depKey(kind, wt)
+          if (hash && !existsSync(dst)) {
+            const cached = this.setupCache.get(p.id, kind.dir, hash)
+            const source = cached ?? (fast.canReuse(kind, p.path, wt) ? join(p.path, kind.dir) : null)
+            if (source) {
+              const started = Date.now()
+              const how = await doing(devenv.setupLabel(cmd), () => fast.cloneDir(source, dst))
+              if (how) {
+                // Tool caches can hold absolute paths of the folder they came from.
+                if (kind.dir === 'node_modules') for (const c of ['.vite', '.cache']) rmSync(join(dst, c), { recursive: true, force: true })
+                log(`✓ ${kind.dir} reused from ${cached ? 'an earlier change' : 'the main checkout'} (${how}, ${secs(Date.now() - started)})`)
+                step(`✓ ${devenv.setupLabel(cmd, true)} (reused, ${secs(Date.now() - started)})`)
+                if (!cached) void this.setupCache.put(p.id, kind.dir, hash, dst).catch(() => {})
+                return true
+              }
+            }
+            // Composer installs incrementally: start from the main checkout's packages, fetch only the difference.
+            if (kind.manager === 'composer' && existsSync(join(p.path, 'vendor'))) {
+              const how = await fast.cloneDir(join(p.path, 'vendor'), dst)
+              if (how) log(`Started from the main checkout's vendor/ (${how}); composer installs only what differs`)
+            }
+          }
+          const good = await runCmd(cmd)
+          if (good && hash) void this.setupCache.put(p.id, kind.dir, hash, dst).catch(() => {})
+          return good
+        }
+
+        // Builds: reuse an earlier build of exactly the same inputs (Laravel/Vite's public/build).
+        const build = async (cmd: string): Promise<boolean> => {
+          const out = join(wt, 'public', 'build')
+          const key = p.isLaravel ? await fast.buildKey(wt) : null
+          const cached = key ? this.setupCache.get(p.id, 'build', key) : null
+          if (cached && !existsSync(out)) {
+            const started = Date.now()
+            if (await fast.cloneDir(cached, out)) {
+              log(`✓ public/build reused from an earlier build of the same code`)
+              step(`✓ ${devenv.setupLabel(cmd, true)} (reused, ${secs(Date.now() - started)})`)
+              return true
+            }
+          }
+          const good = await runCmd(cmd)
+          if (good && key && existsSync(out)) void this.setupCache.put(p.id, 'build', key, out).catch(() => {})
+          return good
+        }
+
+        const plan = fast.planSetup(r.config.setup)
+        for (const c of plan.before) {
+          if (!(await runCmd(c))) {
             ok = false
-            log(`✗ ${cmd} exited with code ${code}`)
-            step(`✗ ${devenv.setupLabel(cmd)} failed (exit ${code}) — see the Setup tab`)
             break
           }
-          step(`✓ ${devenv.setupLabel(cmd, true)}`)
         }
-      }
-      // 5. Migrations against the feature's own database
-      const fd = store().feature(featureId).database
-      if (ok && fd && r.trusted && p.isLaravel && r.config.database.migrate && existsSync(join(f.worktreePath, 'artisan'))) {
-        card('running', 'Running migrations')
-        // A brand-new database gets sample data when the seeders do something (or the config says so).
-        const seed = r.config.database.mode === 'empty' && (r.config.database.seed ?? seederDoesSomething(f.worktreePath))
-        const m = await exec('php', ['artisan', 'migrate', '--force', ...(seed ? ['--seed'] : [])], {
-          cwd: f.worktreePath,
-          env: runEnv,
-          timeoutMs: 10 * 60_000
-        })
-        log(m.stdout + m.stderr)
-        step(m.code === 0 ? `✓ Migrations ran${seed ? ' and database seeded' : ''}` : '✗ Migrations failed — see the Setup tab')
-      }
-      // 6. After the database is ready: storage link, package keys, custom seeders…
-      if (ok && r.trusted && !f.inPlace && r.config.prepare?.length) {
-        for (const cmd of r.config.prepare) {
-          log(`$ ${cmd}`)
-          card('running', devenv.setupLabel(cmd))
-          const code = await this.streamSetupCommand(featureId, cmd, f.worktreePath, { ...runEnv, SF_WORKTREE: f.worktreePath, SF_MAIN_REPO: p.path })
-          step(code === 0 ? `✓ ${devenv.setupLabel(cmd, true)}` : `✗ ${devenv.setupLabel(cmd)} failed (exit ${code}) — see the Setup tab`)
+        if (ok) {
+          const js = plan.installs.find((c) => fast.installKind(c)!.dir === 'node_modules')
+          const jsReady = js ? install(js) : Promise.resolve(true)
+          // Builds only need the JavaScript packages: they run alongside migrations and the rest.
+          const builds = jsReady.then(async (good) => {
+            if (!good) return false
+            for (const b of plan.builds) if (!(await build(b))) return false
+            return true
+          })
+          const [, phpOk, jsOk] = await Promise.all([
+            database(),
+            Promise.all(plan.installs.filter((c) => c !== js).map(install)).then((rs) => rs.every(Boolean)),
+            jsReady
+          ])
+          ok = phpOk && jsOk
+          for (const c of ok ? plan.after : []) {
+            if (!(await runCmd(c))) {
+              ok = false
+              break
+            }
+          }
+          // Migrations against the feature's own database
+          const fd = store().feature(featureId).database
+          if (ok && fd && r.trusted && p.isLaravel && r.config.database.migrate && existsSync(join(wt, 'artisan'))) {
+            // A brand-new database gets sample data when the seeders do something (or the config says so).
+            const seed = r.config.database.mode === 'empty' && (r.config.database.seed ?? seederDoesSomething(wt))
+            const started = Date.now()
+            const m = await doing('Running migrations', () => exec('php', ['artisan', 'migrate', '--force', ...(seed ? ['--seed'] : [])], { cwd: wt, env: runEnv, timeoutMs: 10 * 60_000 }))
+            log(m.stdout + m.stderr)
+            step(m.code === 0 ? `✓ Migrations ran${seed ? ' and database seeded' : ''} (${secs(Date.now() - started)})` : '✗ Migrations failed — see the Setup tab')
+          }
+          // After the database is ready: storage link, package keys, custom seeders…
+          if (ok && r.trusted && r.config.prepare?.length) {
+            for (const cmd of r.config.prepare) await runCmd(cmd, { ...runEnv, SF_WORKTREE: wt, SF_MAIN_REPO: p.path })
+          }
+          ok = (await builds) && ok
         }
+        log(`${ok ? '✓' : '✗'} Setup ${ok ? 'finished' : 'stopped'} in ${secs(Date.now() - t0)}`)
+        if (ok) step(`✓ Ready in ${secs(Date.now() - t0)}`)
       }
     } catch (e) {
       ok = false

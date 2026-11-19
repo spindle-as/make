@@ -1,24 +1,26 @@
 import clsx from 'clsx'
-import { useEffect } from 'react'
-import { ArchiveDialog } from './components/ArchiveDialog'
+import { lazy, Suspense, useEffect } from 'react'
 import { Chat } from './components/Chat'
-import { CommandPalette } from './components/CommandPalette'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { NewThread } from './components/NewThread'
-import { OpenProjectDialog } from './components/OpenProject'
-import { Onboarding } from './components/Onboarding'
-import { ProjectDialog } from './components/ProjectDialog'
-import { ShipDialog } from './components/ShipDialog'
-import { UpdateDialog } from './components/Updates'
 import { RightPanel } from './components/RightPanel'
-import { SettingsDialog } from './components/SettingsDialog'
-import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { Sidebar } from './components/Sidebar'
 import { ThreadHeader } from './components/ThreadHeader'
 import { Toasts } from './components/Toasts'
 import { runAction } from './lib/actions'
 import { matchShortcut } from './lib/shortcuts'
 import { useSelected, useStore } from './store'
+
+// Dialogs and onboarding load on first use: a smaller bundle opens faster.
+const ArchiveDialog = lazy(() => import('./components/ArchiveDialog').then((m) => ({ default: m.ArchiveDialog })))
+const CommandPalette = lazy(() => import('./components/CommandPalette').then((m) => ({ default: m.CommandPalette })))
+const OpenProjectDialog = lazy(() => import('./components/OpenProject').then((m) => ({ default: m.OpenProjectDialog })))
+const Onboarding = lazy(() => import('./components/Onboarding').then((m) => ({ default: m.Onboarding })))
+const ProjectDialog = lazy(() => import('./components/ProjectDialog').then((m) => ({ default: m.ProjectDialog })))
+const ShipDialog = lazy(() => import('./components/ShipDialog').then((m) => ({ default: m.ShipDialog })))
+const UpdateDialog = lazy(() => import('./components/Updates').then((m) => ({ default: m.UpdateDialog })))
+const SettingsDialog = lazy(() => import('./components/SettingsDialog').then((m) => ({ default: m.SettingsDialog })))
+const ShortcutsDialog = lazy(() => import('./components/ShortcutsDialog').then((m) => ({ default: m.ShortcutsDialog })))
 
 /** Light/dark from Settings → Appearance ("system" follows macOS through CSS). */
 function useTheme() {
@@ -96,9 +98,11 @@ export default function App() {
   if (!onboarded) {
     return (
       <div className="h-full">
-        <Onboarding />
-        {modal?.kind === 'project' && <ProjectDialog projectId={modal.projectId} tab={modal.tab} onClose={close} />}
-        {modal?.kind === 'open-project' && <OpenProjectDialog onClose={close} />}
+        <Suspense fallback={null}>
+          <Onboarding />
+          {modal?.kind === 'project' && <ProjectDialog projectId={modal.projectId} tab={modal.tab} onClose={close} />}
+          {modal?.kind === 'open-project' && <OpenProjectDialog onClose={close} />}
+        </Suspense>
         <Toasts />
       </div>
     )
@@ -129,6 +133,7 @@ export default function App() {
           <NewThread />
         )}
       </main>
+      <Suspense fallback={null}>
       {modal?.kind === 'settings' && <SettingsDialog onClose={close} initialTab={modal.tab} />}
       {modal?.kind === 'project' && <ProjectDialog projectId={modal.projectId} tab={modal.tab} onClose={close} />}
       {modal?.kind === 'archive' && <ArchiveDialog featureId={modal.featureId} onClose={close} />}
@@ -137,6 +142,7 @@ export default function App() {
       {modal?.kind === 'open-project' && <OpenProjectDialog onClose={close} />}
       {modal?.kind === 'update' && <UpdateDialog onClose={close} />}
       {modal?.kind === 'ship' && <ShipDialog featureId={modal.featureId} onClose={close} />}
+      </Suspense>
       <Toasts />
     </div>
   )

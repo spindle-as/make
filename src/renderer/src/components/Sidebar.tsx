@@ -11,7 +11,7 @@ import { runAction } from '../lib/actions'
 import { act } from '../store'
 import { Segmented } from './ui'
 import { UpdateNotice } from './Updates'
-import { IconButton, Kbd, timeAgo } from './ui'
+import { IconButton, Kbd, ResizeHandle, timeAgo } from './ui'
 
 export const STAGE_LABEL: Record<FeatureStage, string> = {
   setup: 'Setting up',
@@ -159,6 +159,8 @@ export function Sidebar() {
 }
 
 function FullSidebar() {
+  const sidebarWidth = useStore((s) => s.sidebarWidth)
+  const setSidebarWidth = useStore((s) => s.setSidebarWidth)
   const projects = useStore((s) => s.projects)
   const features = useStore((s) => s.features)
   const openModal = useStore((s) => s.openModal)
@@ -188,7 +190,8 @@ function FullSidebar() {
   const showDone = doneOpen || !!q || done.some((f) => f.id === selectedId)
 
   return (
-    <aside className="flex h-full w-[272px] shrink-0 flex-col border-r border-line bg-panel" aria-label="Threads">
+    <aside className="relative flex h-full shrink-0 flex-col border-r border-line bg-panel" style={{ width: sidebarWidth }} aria-label="Threads">
+      <ResizeHandle edge="right" label="Resize sidebar" value={sidebarWidth} min={220} max={440} fallback={272} onChange={setSidebarWidth} />
       <div className="drag flex h-12 shrink-0 items-center justify-end gap-0.5 pr-2 pl-20">
         <IconButton title="Open project" shortcut="add-project" onClick={() => void runAction('add-project')}>
           <FolderPlus className="size-4" />

@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { constants as fsConstants, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { createConnection } from 'node:net'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative } from 'node:path'
@@ -220,7 +220,8 @@ export async function provision(
     const target = join(worktree, rel)
     mkdirSync(dirname(target), { recursive: true })
     const copied = mode === 'clone' && existsSync(source)
-    if (copied) copyFileSync(source, target)
+    // Copy-on-write on APFS: instant, and no extra disk space until either file changes.
+    if (copied) copyFileSync(source, target, fsConstants.COPYFILE_FICLONE)
     else writeFileSync(target, '')
     // Always absolute: Laravel resolves a relative DB_DATABASE against the *current directory*,
     // which differs between artisan, php -S, Herd/php-fpm and the agent's shell.
@@ -238,7 +239,17 @@ export async function provision(
     const createdb = await bin(cfg, 'createdb')
     const r = await exec(createdb, [...pgArgs(cfg), name], { env: pgEnv(cfg), timeoutMs: 60_000 })
     if (r.code !== 0 && !/already exists/.test(r.stderr)) throw new Error(`createdb failed: ${r.stderr.trim()}`)
+    // Fastest: a server-side copy using the main database as a template. Postgres refuses while
+    // something else is connected to it (a running dev server); then fall back to dump & restore.
+    let templated = false
     if (mode === 'clone') {
+      await exec(await bin(cfg, 'dropdb'), [...pgArgs(cfg), '--if-exists', name], { env: pgEnv(cfg), timeoutMs: 60_000 })
+      const t = await exec(createdb, [...pgArgs(cfg), '-T', cfg.database, name], { env: pgEnv(cfg), timeoutMs: 15 * 60_000 })
+      templated = t.code === 0
+      if (!templated) await exec(createdb, [...pgArgs(cfg), name], { env: pgEnv(cfg), timeoutMs: 60_000 })
+      else log(`✓ Copied ${cfg.database} on the server (template copy)`)
+    }
+    if (mode === 'clone' && !templated) {
       const dump = await bin(cfg, 'pg_dump')
       const psql = await bin(cfg, 'psql')
       const a = pgArgs(cfg).map(shellQuote).join(' ')
@@ -259,7 +270,8 @@ export async function provision(
       const dump = await bin(cfg, 'mysqldump')
       const a = mysqlArgs(cfg).map(shellQuote).join(' ')
       const c = await shell(
-        `${shellQuote(dump)} ${a} --single-transaction --routines --triggers --no-tablespaces ${shellQuote(cfg.database)} | ${shellQuote(mysql)} ${a} ${shellQuote(name)}`,
+        // Restore without per-row key checks and commits — much faster for big tables.
+        `{ echo 'SET foreign_key_checks=0; SET unique_checks=0; SET autocommit=0;'; ${shellQuote(dump)} ${a} --single-transaction --quick --routines --triggers --no-tablespaces ${shellQuote(cfg.database)}; echo 'COMMIT;'; } | ${shellQuote(mysql)} ${a} ${shellQuote(name)}`,
         { env: mysqlEnv(cfg), timeoutMs: 15 * 60_000 }
       )
       if (c.code !== 0) throw new Error(`Cloning ${cfg.database} failed: ${c.stderr.trim().split('\n').slice(-3).join(' ')}`)

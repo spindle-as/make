@@ -1,17 +1,17 @@
 import clsx from 'clsx'
 import { ChevronDown, Database, FileDiff, Globe, Mail, ScrollText, SquareTerminal, Wrench, X } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Feature, Project } from '@shared/types'
-import { ChangesPanel } from '../panels/ChangesPanel'
-import { DataPanel } from '../panels/DataPanel'
-import { MailPanel } from '../panels/MailPanel'
 import { useIsCreator, useWords, type Words } from '../lib/words'
-import { LogsPanel } from '../panels/LogsPanel'
 import { PreviewPanel } from '../panels/PreviewPanel'
-import { SetupPanel } from '../panels/SetupPanel'
-import { TerminalPanel } from '../panels/TerminalPanel'
 import { useStore, type RightTab } from '../store'
-import { IconButton, Menu } from './ui'
+import { IconButton, Menu, ResizeHandle } from './ui'
+const TerminalPanel = lazy(() => import('../panels/TerminalPanel').then((m) => ({ default: m.TerminalPanel })))
+const SetupPanel = lazy(() => import('../panels/SetupPanel').then((m) => ({ default: m.SetupPanel })))
+const LogsPanel = lazy(() => import('../panels/LogsPanel').then((m) => ({ default: m.LogsPanel })))
+const MailPanel = lazy(() => import('../panels/MailPanel').then((m) => ({ default: m.MailPanel })))
+const DataPanel = lazy(() => import('../panels/DataPanel').then((m) => ({ default: m.DataPanel })))
+const ChangesPanel = lazy(() => import('../panels/ChangesPanel').then((m) => ({ default: m.ChangesPanel })))
 
 type ViewDef = { key: RightTab; label: (w: Words) => string; description: string; icon: ReactNode }
 /** What the side panel can show. Review & ship is not here: it's a dialog of its own. */
@@ -66,58 +66,36 @@ export function RightPanel({ feature, project }: { feature: Feature; project: Pr
       return next
     })
   }, [tab, feature.id, available])
-  const [width, setWidth] = useState(() => {
+  const [width, setWidthState] = useState(() => {
     try {
       return Number(localStorage.getItem(LS_WIDTH)) || 600
     } catch {
       return 600
     }
   })
-  const dragging = useRef(false)
+  const setWidth = (w: number) => {
+    setWidthState(w)
+    try {
+      localStorage.setItem(LS_WIDTH, String(w))
+    } catch {
+      /* ignore */
+    }
+  }
   const [viewport, setViewport] = useState(window.innerWidth)
   useEffect(() => {
     const onResize = () => setViewport(window.innerWidth)
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
-  // Never let the panel squeeze the conversation: keep ~460px for chat next to the sidebar.
+  // Never let the panel squeeze the conversation: keep ~420px for chat next to the sidebar.
   const sidebarOpen = useStore((s) => s.sidebarOpen)
-  const clamped = Math.max(360, Math.min(width, viewport - (sidebarOpen ? 280 : 0) - 460))
-
-  const onMove = useCallback((e: MouseEvent) => {
-    if (!dragging.current) return
-    const w = Math.min(Math.max(window.innerWidth - e.clientX, 360), window.innerWidth - 740)
-    setWidth(w)
-  }, [])
-
-  useEffect(() => {
-    const up = () => {
-      if (!dragging.current) return
-      dragging.current = false
-      document.body.style.cursor = ''
-      try {
-        localStorage.setItem(LS_WIDTH, String(width))
-      } catch {
-        /* ignore */
-      }
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', up)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', up)
-    }
-  }, [onMove, width])
+  const sidebarWidth = useStore((s) => s.sidebarWidth)
+  const maxWidth = Math.max(360, viewport - (sidebarOpen ? sidebarWidth : 56) - 420)
+  const clamped = Math.max(360, Math.min(width, maxWidth))
 
   return (
     <div className="relative flex h-full shrink-0 flex-col border-l border-line bg-panel" style={{ width: clamped }}>
-      <div
-        className="absolute top-0 -left-1 z-20 h-full w-2 cursor-col-resize"
-        onMouseDown={() => {
-          dragging.current = true
-          document.body.style.cursor = 'col-resize'
-        }}
-      />
+      <ResizeHandle edge="left" label="Resize side panel" value={clamped} min={360} max={maxWidth} fallback={600} onChange={setWidth} />
       <div className="drag flex h-14 shrink-0 items-center gap-2 border-b border-line px-3">
         <Menu
           label="Show in the side panel"
@@ -125,7 +103,6 @@ export function RightPanel({ feature, project }: { feature: Feature; project: Pr
           items={VIEWS.filter((v) => available.includes(v.key)).map((v) => ({
             key: v.key,
             label: v.label(w),
-            description: v.description,
             icon: v.icon,
             checked: tab === v.key,
             trailing:
@@ -175,12 +152,14 @@ export function RightPanel({ feature, project }: { feature: Feature; project: Pr
         })}
         {tab !== 'preview' && (
           <div className="absolute inset-0">
+            <Suspense fallback={null}>
         {tab === 'changes' && <ChangesPanel feature={feature} />}
         {tab === 'email' && <MailPanel feature={feature} />}
         {tab === 'data' && <DataPanel feature={feature} />}
         {tab === 'logs' && <LogsPanel feature={feature} project={project} />}
         {tab === 'terminal' && <TerminalPanel feature={feature} project={project} />}
         {tab === 'setup' && <SetupPanel feature={feature} />}
+            </Suspense>
           </div>
         )}
       </div>

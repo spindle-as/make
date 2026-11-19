@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { ArrowRight, Factory, FolderPlus, GitBranch, MessageSquare, Sparkles, TriangleAlert } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { ThreadKind } from '@shared/types'
 import { runAction } from '../lib/actions'
 import { useIsCreator, useWords } from '../lib/words'
@@ -8,7 +8,7 @@ import { ProjectSetupCard } from './OpenProject'
 import { act, orderedThreads, useStore } from '../store'
 import { Composer, type AgentConfig } from './Composer'
 import { MainVersion } from './MainVersion'
-import { Kbd, Segmented, Select, timeAgo } from './ui'
+import { Kbd, ResizeHandle, Segmented, Select, timeAgo } from './ui'
 import { shortcutFor } from '../lib/shortcuts'
 
 const FEATURE_IDEAS = [
@@ -32,6 +32,22 @@ export function NewThread() {
   const isFeature = draft.kind === 'feature'
   const w = useWords()
   const creator = useIsCreator()
+  // The live preview on the right is resizable; its width is remembered.
+  const [mainWidth, setMainWidthState] = useState(() => {
+    try {
+      return Number(localStorage.getItem('sf.mainWidth')) || Math.round(window.innerWidth * 0.45)
+    } catch {
+      return Math.round(window.innerWidth * 0.45)
+    }
+  })
+  const setMainWidth = (w: number) => {
+    setMainWidthState(w)
+    try {
+      localStorage.setItem('sf.mainWidth', String(w))
+    } catch {
+      /* ignore */
+    }
+  }
 
   const missing = useMemo(() => (integrations ?? []).filter((i) => !i.optional && !i.ready), [integrations])
   const noAgent = integrations && !integrations.some((i) => (i.id === 'claude' || i.id === 'codex') && i.ready)
@@ -76,16 +92,7 @@ export function NewThread() {
             <div className="flex size-12 items-center justify-center rounded-2xl border border-line-strong bg-raised">
               {isFeature ? <Factory className="size-6 text-fg" /> : <MessageSquare className="size-6 text-fg" />}
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight">{isFeature ? w.whatShouldWeBuild : 'What do you want to talk about?'}</h1>
-            <p className="max-w-lg text-base text-muted">
-              {showMain
-                ? 'Describe it here — or point at things in the live app on the right. Either way it starts in its own safe copy.'
-                : isFeature
-                ? w.buildHint
-                : project
-                  ? `Ask anything about ${project.name}. Nothing is changed unless you ask — continue it as a feature when you're ready.`
-                  : 'A general conversation, not tied to any project.'}
-            </p>
+            <h1 className="magic-title text-3xl font-semibold tracking-tight">{isFeature ? w.whatShouldWeBuild : 'What do you want to talk about?'}</h1>
           </div>
 
           {(missing.length > 0 || noAgent) && (
@@ -112,7 +119,7 @@ export function NewThread() {
             cfg={cfg}
             onChange={(p) => setDraft(p)}
             onSubmit={submit}
-            placeholder={isFeature ? `Describe the ${w.feature.toLowerCase()} — type / for commands` : 'Ask anything…'}
+            placeholder={isFeature ? `Describe the ${w.feature.toLowerCase()}…` : 'Ask anything…'}
             header={
               <>
                 <Segmented<ThreadKind>
@@ -169,7 +176,7 @@ export function NewThread() {
             </button>
           )}
 
-          <div className="flex flex-wrap justify-center gap-2">
+          <div className={clsx('flex flex-wrap justify-center gap-2', recent.length > 0 && 'hidden')}>
             {ideas.map((idea) => (
               <button
                 key={idea}
@@ -194,9 +201,6 @@ export function NewThread() {
             <div className="mt-4">
               <div className="mb-2 flex items-center justify-between px-1">
                 <h2 className="text-sm font-medium text-muted">Recent</h2>
-                <span className="flex items-center gap-1.5 text-xs text-faint">
-                  Jump with <Kbd keys={['⌘', '1–9']} /> or <Kbd keys={shortcutFor('palette')} />
-                </span>
               </div>
               <div className="flex flex-col gap-1">
                 {recent.map((f) => {
@@ -222,7 +226,8 @@ export function NewThread() {
       </div>
     </div>
     {showMain && (
-      <div className="flex w-[52%] max-w-[980px] min-w-[380px] shrink flex-col border-l border-line bg-panel">
+      <div className="relative flex shrink-0 flex-col border-l border-line bg-panel" style={{ width: Math.min(mainWidth, Math.max(380, window.innerWidth - 640)) }}>
+        <ResizeHandle edge="left" label="Resize preview" value={mainWidth} min={380} max={Math.max(380, window.innerWidth - 640)} fallback={Math.round(window.innerWidth * 0.45)} onChange={setMainWidth} />
         <div className="drag h-12 shrink-0 border-b border-line" />
         <div className="min-h-0 flex-1">
           <MainVersion key={project!.id} project={project!} agent={{ agent: draft.agent, model: draft.model, effort: draft.effort, permissionMode: draft.permissionMode, baseBranch: draft.baseBranch }} />

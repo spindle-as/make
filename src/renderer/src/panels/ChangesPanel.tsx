@@ -144,7 +144,7 @@ export function ChangesPanel({ feature }: { feature: Feature }) {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {files.length === 0 ? (
-          <Empty title={loading ? 'Loading…' : 'No changes yet'}>Changes the AI makes here show up as it works.</Empty>
+          <Empty title={loading ? 'Loading…' : 'No changes yet'} />
         ) : (
           files.map((f) => (
             <FileDiff
